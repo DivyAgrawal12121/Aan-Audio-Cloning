@@ -1,0 +1,192 @@
+VoxForge — AI Voice Studio
+============================
+Product Requirements Document (PRD)
+
+Last Updated: 2026-03-05
+
+=====================================
+1. OVERVIEW
+=====================================
+
+VoxForge is a local-first web application for AI voice synthesis, built on the 
+Qwen3-TTS 1.7B INT8 model. It provides a premium, professional-grade interface 
+for voice cloning, voice design from text, and text-to-speech generation with 
+full emotional and stylistic control.
+
+Tech Stack:
+  - Frontend: Next.js 16 + TypeScript + Tailwind CSS v4
+  - Backend:  Python FastAPI + Qwen3-TTS 1.7B INT8
+  - Storage:  Local filesystem (voice embeddings + metadata as JSON)
+
+=====================================
+2. CORE FEATURES (IMPLEMENTED)
+=====================================
+
+2.1  Voice Cloning
+  - Upload a 3-10 second audio sample (WAV, MP3, FLAC, OGG, M4A)
+  - Extract a speaker embedding via Qwen3-TTS
+  - Save the embedding + metadata locally on device
+  - Name, describe, tag, and select language for each voice
+  - Audio preview of uploaded sample before cloning
+  - Reuse saved voices across unlimited future generations
+
+2.2  Text-to-Speech Generation
+  - Select a saved voice from the library
+  - Enter text script (up to 5000 characters)
+  - Choose target language from 11 supported languages
+  - Emotion control: neutral, happy, sad, angry, fearful, surprised, 
+    disgusted, whispering, excited, calm
+  - Speed control: 0.5x to 2.0x
+  - Pitch control: 0.5x to 2.0x
+  - Precise duration control (force exact seconds)
+  - Style instructions via natural language
+  - Paralinguistic tag insertion: (laughs), (coughs), (gasps), (sighs), 
+    (clears throat), (sniffs), (yawns), (whispers)
+  - Audio output with waveform player + download
+
+2.3  Voice Design (Natural Language)
+  - Describe a voice that doesn't exist using text
+  - Specify timbre, age, gender, accent, tone, personality
+  - 6 built-in presets: Warm Narrator, Young Energetic, News Anchor, 
+    Storyteller, AI Assistant, Dramatic Actor
+  - Save designed voices to local library
+  - Preview designed voices immediately
+
+2.4  Voice Library
+  - View all saved voices (cloned + designed)
+  - Search/filter by name, description, language, tags
+  - Preview any voice with one click
+  - Delete voices
+  - Voice metadata: name, description, language, tags, creation date
+
+=====================================
+3. SUPPORTED LANGUAGES
+=====================================
+
+English, Hindi, Chinese, Japanese, Korean, German, French, Russian, 
+Portuguese, Spanish, Italian
+
+=====================================
+4. ARCHITECTURE
+=====================================
+
+┌────────────────────┐     HTTP/REST     ┌──────────────────────┐
+│   Next.js Frontend │  ─────────────>   │  Python FastAPI      │
+│   (localhost:3000)  │  <─────────────   │  (localhost:8000)    │
+│                     │                   │                      │
+│  - Dashboard        │                   │  - /api/clone        │
+│  - Voice Cloning    │                   │  - /api/generate     │
+│  - Generate Speech  │   audio/json      │  - /api/design-voice │
+│  - Voice Design     │                   │  - /api/voices       │
+│  - Voice Library    │                   │  - /api/preview      │
+│  - Settings         │                   │                      │
+└────────────────────┘                   │  Qwen3-TTS 1.7B INT8│
+                                          │  (GPU or CPU)        │
+                                          └──────────────────────┘
+                                                    │
+                                                    ▼
+                                          ┌──────────────────────┐
+                                          │  Local File Storage  │
+                                          │  backend/data/voices │
+                                          │  ├── {id}/           │
+                                          │  │   ├── meta.json   │
+                                          │  │   ├── embedding.pt │
+                                          │  │   └── sample.wav  │
+                                          └──────────────────────┘
+
+=====================================
+5. FRONTEND PAGES
+=====================================
+
+5.1  Dashboard (/)
+  - Hero with model badge (Qwen3-TTS 1.7B INT8)
+  - Stats: 11 languages, 10+ emotions, 3s cloning, <100ms latency
+  - 4 feature cards linking to each section
+  - Supported languages chip display
+
+5.2  Voice Cloning (/clone)
+  - Drag & drop audio uploader with validation
+  - Audio sample preview player
+  - Voice details form (name, language, description, tags)
+  - Clone button with loading state
+  - Success/error feedback
+  - Best practices tips
+
+5.3  Generate Speech (/generate)
+  - Voice selector with dropdown picker
+  - Text area with character count (5000 max)
+  - Paralinguistic tag quick-insert buttons
+  - Language selector (chip-style)
+  - Sidebar: Emotion grid, Speed/Pitch sliders, Duration control, 
+    Style instructions textarea
+  - Waveform audio player for output
+  - Download generated audio
+
+5.4  Voice Design (/design)
+  - Natural language description textarea
+  - 6 voice preset templates (click to populate)
+  - Voice name + language fields
+  - Design & save button with loading state
+  - Audio preview of designed voice
+
+5.5  My Voices (/voices)
+  - Search bar with instant filtering
+  - Voice cards: name, description, language, tags, time ago
+  - Preview button (generates short sample)
+  - Delete button with confirmation
+  - Empty state with CTA to clone/design
+
+5.6  Settings (/settings)
+  - Backend URL configuration
+  - Connection health check
+  - Model status (device, loaded state)
+  - Quick start CLI guide
+
+=====================================
+6. BACKEND ENDPOINTS
+=====================================
+
+POST   /api/clone          Upload audio → extract embedding → save voice
+POST   /api/design-voice   Text description → generate embedding → save voice
+POST   /api/generate       Text + voice + settings → WAV audio stream
+POST   /api/preview        Voice ID → short preview WAV
+GET    /api/voices          List all saved voices
+GET    /api/voices/{id}     Get single voice details
+DELETE /api/voices/{id}     Delete a voice and all data
+GET    /api/voices/{id}/sample  Download original audio sample
+GET    /health              Backend health + model status
+
+=====================================
+7. DESIGN SYSTEM
+=====================================
+
+Theme: Dark premium with glassmorphism
+Palette:
+  - Background: #06060e, #0d0d1a
+  - Cards: rgba(17,17,40,0.6) with blur(20px)
+  - Primary: #8b5cf6 → #6366f1 (purple gradient)
+  - Secondary: #06b6d4 (cyan)
+  - Accent: #ec4899 (pink)
+  - Text: #f1f5f9 / #94a3b8 / #64748b
+Font: Inter (Google Fonts)
+Effects:
+  - Animated ambient background orbs
+  - Glassmorphism cards with border glow on hover
+  - Gradient glow buttons
+  - Custom scrollbar
+  - Canvas waveform visualizer
+  - Smooth transitions (cubic-bezier)
+
+=====================================
+8. FUTURE ENHANCEMENTS
+=====================================
+
+- Voice Morphing / Math (blend 2 voice embeddings)
+- Gender/Pitch mathematical swapping
+- Batch TTS generation (multiple texts)
+- SSML support
+- Real-time streaming generation
+- Voice export/import (share between devices)
+- Audio recording directly in browser (microphone capture)
+- Multi-speaker dialogue generation
+- WebSocket for real-time generation progress
