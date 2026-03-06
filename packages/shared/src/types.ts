@@ -1,5 +1,5 @@
 // ============================================
-// VoxForge Shared — Type Definitions
+// Resound Studio Shared — Type Definitions
 // ============================================
 
 export interface SavedVoice {

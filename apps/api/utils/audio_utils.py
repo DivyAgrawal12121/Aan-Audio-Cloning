@@ -5,7 +5,7 @@ import soundfile as sf
 import logging
 from typing import Optional
 
-logger = logging.getLogger("voxforge.utils.audio")
+logger = logging.getLogger("resound-studio.utils.audio")
 
 try:
     from num2words import num2words

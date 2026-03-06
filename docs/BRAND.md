@@ -1,10 +1,10 @@
-# VoxForge — Brand Guidelines
+# Resound Studio — Brand Guidelines
 
 ---
 
 ## Brand Identity
 
-**VoxForge** (Latin *vox* = voice + *forge* = to create/shape)
+**Resound Studio** (Latin *vox* = voice + *forge* = to create/shape)
 
 An AI Voice Studio that empowers creators to clone, design, and generate ultra-realistic voices — entirely locally, with no cloud dependency.
 
@@ -22,7 +22,7 @@ An AI Voice Studio that empowers creators to clone, design, and generate ultra-r
 - **Shape:** 36×36px rounded square (10px radius)
 - **Gradient:** `linear-gradient(135deg, #8b5cf6, #06b6d4)` (purple → cyan)
 - **Glow:** `0 4px 16px rgba(139, 92, 246, 0.35)`
-- **Text:** "VoxForge" in Inter 800 weight, gradient text (`#f1f5f9 → #94a3b8`)
+- **Text:** "Resound Studio" in Inter 800 weight, gradient text (`#f1f5f9 → #94a3b8`)
 - **Subtitle:** "AI Voice Studio" in 0.58rem, uppercase, muted, `0.08em` tracking
 
 ---
@@ -80,7 +80,7 @@ An AI Voice Studio that empowers creators to clone, design, and generate ultra-r
 
 - **GitHub:** Primary distribution channel
 - **Instagram:** Content and community building
-- **Tags:** `#VoxForge` `#AIVoice` `#OpenSource` `#VoiceCloning` `#TTS`
+- **Tags:** `#Resound Studio` `#AIVoice` `#OpenSource` `#VoiceCloning` `#TTS`
 - **Content angles:**
   - Demo reels (before/after voice cloning)
   - Architecture deep-dives

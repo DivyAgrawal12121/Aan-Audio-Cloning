@@ -1,4 +1,4 @@
-# VoxForge — AI Voice Studio
+# Resound Studio — AI Voice Studio
 
 > Local-first AI voice cloning, text-to-speech, and audio generation powered by multiple open-source models.
 
@@ -54,8 +54,8 @@ This is a **pnpm monorepo** with the following structure:
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/your-username/voxforge.git
-cd voxforge
+git clone https://github.com/your-username/resound-studio.git
+cd resound-studio
 
 # Install frontend + shared packages
 pnpm install

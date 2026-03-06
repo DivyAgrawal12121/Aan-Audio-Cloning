@@ -10,7 +10,7 @@ import soundfile as sf
 
 from engines.base_engine import BaseEngine
 
-logger = logging.getLogger("voxforge.engines.qwen_design")
+logger = logging.getLogger("resound-studio.engines.qwen_design")
 
 
 class QwenDesignEngine(BaseEngine):

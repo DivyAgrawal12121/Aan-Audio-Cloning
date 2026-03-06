@@ -12,7 +12,7 @@ import soundfile as sf
 from engines.base_engine import BaseEngine
 from utils.audio_utils import normalize_text
 
-logger = logging.getLogger("voxforge.engines.cosyvoice")
+logger = logging.getLogger("resound-studio.engines.cosyvoice")
 
 
 class CosyVoiceEngine(BaseEngine):

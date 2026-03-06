@@ -1,5 +1,5 @@
 // ============================================
-// VoxForge - API Client
+// Resound Studio - API Client
 // ============================================
 
 import axios from "axios";

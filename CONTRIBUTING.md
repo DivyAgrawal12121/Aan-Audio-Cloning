@@ -1,6 +1,6 @@
-# Contributing to VoxForge
+# Contributing to Resound Studio
 
-Thanks for your interest in contributing! VoxForge is open source and we welcome contributions of all sizes — from fixing typos to building entire features.
+Thanks for your interest in contributing! Resound Studio is open source and we welcome contributions of all sizes — from fixing typos to building entire features.
 
 ---
 
@@ -9,8 +9,8 @@ Thanks for your interest in contributing! VoxForge is open source and we welcome
 ### 1. Fork & Clone
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/voxforge.git
-cd voxforge
+git clone https://github.com/YOUR_USERNAME/resound-studio.git
+cd resound-studio
 ```
 
 ### 2. Install Dependencies
@@ -99,7 +99,7 @@ chore: remove unused dependencies
 - Use functional components with hooks
 - Extract repeated logic into custom hooks (`src/hooks/`)
 - Use CSS classes from `globals.css` over inline styles when possible
-- Import shared types from `@/lib/types` (re-exports from `@voxforge/shared`)
+- Import shared types from `@/lib/types` (re-exports from `@resound-studio/shared`)
 
 ### Backend (Python)
 - Follow PEP 8

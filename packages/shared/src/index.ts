@@ -1,5 +1,5 @@
 // ============================================
-// VoxForge Shared — Package Entry Point
+// Resound Studio Shared — Package Entry Point
 // ============================================
 
 export * from "./types";

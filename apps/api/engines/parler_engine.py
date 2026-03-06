@@ -11,7 +11,7 @@ import soundfile as sf
 from engines.base_engine import BaseEngine
 from utils.audio_utils import normalize_text
 
-logger = logging.getLogger("voxforge.engines.parler")
+logger = logging.getLogger("resound-studio.engines.parler")
 
 
 class ParlerEngine(BaseEngine):

@@ -105,7 +105,7 @@ export default function DashboardPage() {
             color: "#000",
           }}
         >
-          VOXFORGE <br />
+          RESOUND STUDIO <br />
           <span className="gradient-text">AI STUDIO</span>
         </h1>
         <p
@@ -184,7 +184,7 @@ export default function DashboardPage() {
       {/* Footer Branding */}
       <div style={{ marginTop: "60px", padding: "40px", borderTop: "var(--border-thick)", textAlign: "center" }}>
         <p style={{ fontSize: "0.8rem", fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.2em" }}>
-          VoxForge AI Studio • Built for Creative Freedom
+          Resound Studio AI Studio • Built for Creative Freedom
         </p>
       </div>
     </div>

@@ -1,5 +1,5 @@
 {
-  "name": "@voxforge/web",
+  "name": "@resound-studio/web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,7 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@voxforge/shared": "workspace:*",
+    "@resound-studio/shared": "workspace:*",
     "axios": "^1.13.6",
     "framer-motion": "^12.35.0",
     "lucide-react": "^0.577.0",

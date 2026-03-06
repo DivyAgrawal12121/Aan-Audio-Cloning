@@ -1,5 +1,5 @@
 """
-VoxForge - FastAPI Backend
+Resound Studio - FastAPI Backend
 ============================
 Main server exposing REST API endpoints for:
   - Voice cloning (upload audio → extract embedding → save)
@@ -35,7 +35,7 @@ from voice_store import (
 from utils.audio_utils import master_audio, sanitize_reference_audio
 
 # ---- Logging ----
-log_file_path = os.path.join(os.path.dirname(__file__), "data", "voxforge.log")
+log_file_path = os.path.join(os.path.dirname(__file__), "data", "resound-studio.log")
 os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
@@ -45,13 +45,13 @@ logging.basicConfig(
         logging.FileHandler(log_file_path, encoding="utf-8")
     ]
 )
-logger = logging.getLogger("voxforge")
+logger = logging.getLogger("resound-studio")
 
 # ---- Lifespan ----
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("=" * 60)
-    logger.info("  VoxForge API Server Starting")
+    logger.info("  Resound Studio API Server Starting")
     logger.info("  Multi-Model Architecture v2.0")
     logger.info("=" * 60)
     
@@ -65,11 +65,11 @@ async def lifespan(app: FastAPI):
         pass
         
     yield
-    logger.info("VoxForge API Server Shutting Down")
+    logger.info("Resound Studio API Server Shutting Down")
 
 # ---- App ----
 app = FastAPI(
-    title="VoxForge API",
+    title="Resound Studio API",
     description="AI Voice Cloning & TTS powered by Qwen3-TTS 1.7B",
     version="1.0.0",
     lifespan=lifespan,
@@ -132,7 +132,7 @@ class PreviewRequest(BaseModel):
 # ---- Health ----
 @app.get("/")
 async def root():
-    return {"status": "ok", "service": "VoxForge API", "model": "Qwen3-TTS-1.7B-INT8"}
+    return {"status": "ok", "service": "Resound Studio API", "model": "Qwen3-TTS-1.7B-INT8"}
 
 
 @app.get("/health")

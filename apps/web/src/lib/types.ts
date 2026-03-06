@@ -1,6 +1,6 @@
 // ============================================
-// VoxForge Web — Type Definitions
-// Re-exports from @voxforge/shared for backwards compatibility
+// Resound Studio Web — Type Definitions
+// Re-exports from @resound-studio/shared for backwards compatibility
 // ============================================
 
 export type {
@@ -12,10 +12,10 @@ export type {
   HealthData,
   Emotion,
   SupportedLanguage,
-} from "@voxforge/shared";
+} from "@resound-studio/shared";
 
 export {
   SUPPORTED_LANGUAGES,
   EMOTIONS,
   PARALINGUISTICS,
-} from "@voxforge/shared";
+} from "@resound-studio/shared";

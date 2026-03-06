@@ -1,4 +1,4 @@
-# VoxForge Backend - Python Dependencies
+# Resound Studio Backend - Python Dependencies
 # ========================================
 
 fastapi>=0.115.0

@@ -1,4 +1,4 @@
-# VoxForge — UI Guidelines
+# Resound Studio — UI Guidelines
 
 > Standards for building consistent, premium pages and components
 

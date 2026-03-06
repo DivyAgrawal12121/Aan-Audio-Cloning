@@ -1,10 +1,10 @@
-# VoxForge — Product Requirements
+# Resound Studio — Product Requirements
 
 > Last Updated: 2026-03-06
 
 ## Overview
 
-VoxForge is a **local-first** web application for AI voice synthesis. It provides a premium, professional-grade interface for voice cloning, voice design, and text-to-speech generation with full emotional and stylistic control.
+Resound Studio is a **local-first** web application for AI voice synthesis. It provides a premium, professional-grade interface for voice cloning, voice design, and text-to-speech generation with full emotional and stylistic control.
 
 **Core Principle:** All processing and storage happens locally on the user's device — no cloud APIs, no data leaves your machine.
 

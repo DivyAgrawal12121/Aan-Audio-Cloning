@@ -1,4 +1,4 @@
-# VoxForge — Roadmap
+# Resound Studio — Roadmap
 
 > Planned features and enhancements, ordered by priority
 

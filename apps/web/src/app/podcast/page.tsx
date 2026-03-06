@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Podcast, Loader2, Info, Mic2 } from "lucide-react";
 import AudioPlayer from "@/components/AudioPlayer";
 
-const EXAMPLE_SCRIPT = `A: Welcome to VoxForge Podcast! Today we discuss the future of AI voice technology.
+const EXAMPLE_SCRIPT = `A: Welcome to Resound Studio Podcast! Today we discuss the future of AI voice technology.
 B: Thanks for having me! It's incredible how far voice cloning has come in just the past year.
 A: Absolutely. Just two years ago, you needed hours of training data. Now it's three seconds.
 B: The implications for content creation are mind-boggling. Podcasters, narrators, game developers...`;

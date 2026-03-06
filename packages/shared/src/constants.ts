@@ -1,5 +1,5 @@
 // ============================================
-// VoxForge Shared — Constants
+// Resound Studio Shared — Constants
 // ============================================
 
 import type { SupportedLanguage, Emotion } from "./types";

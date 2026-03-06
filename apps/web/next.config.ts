@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@voxforge/shared"],
+  transpilePackages: ["@resound-studio/shared"],
 };
 
 export default nextConfig;

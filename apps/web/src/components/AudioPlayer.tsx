@@ -99,7 +99,7 @@ export default function AudioPlayer({
         if (!audioUrl) return;
         const a = document.createElement("a");
         a.href = audioUrl;
-        a.download = `voxforge_${Date.now()}.wav`;
+        a.download = `resound-studio_${Date.now()}.wav`;
         a.click();
     };
 

@@ -81,7 +81,7 @@ export default function Sidebar() {
                             lineHeight: 1,
                         }}
                     >
-                        VoxForge
+                        Resound Studio
                     </h1>
                     <p
                         style={{

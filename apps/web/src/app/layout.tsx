@@ -3,7 +3,7 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "VoxForge — AI Voice Studio",
+  title: "Resound Studio — AI Voice Studio",
   description:
     "Clone voices, design custom voices, and generate ultra-realistic speech with Qwen3-TTS. Supports 11 languages, emotion control, and paralinguistic features.",
   keywords: [

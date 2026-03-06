@@ -9,7 +9,7 @@ from dataclasses import dataclass, asdict
 from engines.base_engine import BaseEngine
 from engines.qwen_engine import QwenEngine
 
-logger = logging.getLogger("voxforge.manager")
+logger = logging.getLogger("resound-studio.manager")
 
 
 @dataclass

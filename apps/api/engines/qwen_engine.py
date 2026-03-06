@@ -12,7 +12,7 @@ import soundfile as sf
 from engines.base_engine import BaseEngine
 from utils.audio_utils import normalize_text
 
-logger = logging.getLogger("voxforge.engines.qwen")
+logger = logging.getLogger("resound-studio.engines.qwen")
 
 class QwenEngine(BaseEngine):
     """

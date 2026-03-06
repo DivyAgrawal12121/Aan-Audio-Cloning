@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in VoxForge, please report it responsibly.
+If you discover a security vulnerability in Resound Studio, please report it responsibly.
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
@@ -17,7 +17,7 @@ Several engine files use `torch.load(..., weights_only=False)` to load voice emb
 **Risk:** If a user loads a malicious `.pt` voice file from an untrusted source, it could execute arbitrary code.
 
 **Mitigation:**
-- VoxForge is a local-first application — all voice files are generated locally by default
+- Resound Studio is a local-first application — all voice files are generated locally by default
 - Do not load `.pt` files from untrusted sources
 - We plan to migrate to `safetensors` format in a future release
 

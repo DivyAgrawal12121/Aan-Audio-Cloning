@@ -1,5 +1,5 @@
 """
-VoxForge - Voice Storage Manager
+Resound Studio - Voice Storage Manager
 =================================
 Manages saving, loading, and deleting voice embeddings and metadata on local disk.
 """

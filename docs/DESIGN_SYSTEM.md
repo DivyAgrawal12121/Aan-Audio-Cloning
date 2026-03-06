@@ -1,4 +1,4 @@
-# VoxForge — Design System
+# Resound Studio — Design System
 
 > Dark premium aesthetic with glassmorphism, curated for an AI-native experience
 

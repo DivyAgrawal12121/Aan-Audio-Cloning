@@ -1,4 +1,4 @@
-# VoxForge — Architecture
+# Resound Studio — Architecture
 
 > Multi-model AI voice studio with a modular engine system
 
