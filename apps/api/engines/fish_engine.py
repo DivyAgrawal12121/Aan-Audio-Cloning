@@ -83,9 +83,19 @@ class FishSpeechEngine(BaseEngine):
             
         text = normalize_text(text)
 
-        prompt_data = torch.load(embedding_path, map_location="cpu", weights_only=False)
-        ref_audio = prompt_data.get("ref_audio_path", "")
-        ref_text = prompt_data.get("ref_text", "")
+        prompt_data = None
+        try:
+            prompt_data = torch.load(embedding_path, map_location="cpu", weights_only=False)
+        except Exception:
+            pass
+
+        ref_text = ""
+        if isinstance(prompt_data, dict):
+            ref_text = prompt_data.get("ref_text", "")
+
+        ref_audio = embedding_path.replace("embedding.pt", "sample.wav")
+        if not os.path.exists(ref_audio) and isinstance(prompt_data, dict):
+            ref_audio = prompt_data.get("ref_audio_path", "")
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as out_tmp:
             out_path = out_tmp.name
@@ -129,14 +139,24 @@ class FishSpeechEngine(BaseEngine):
                 
             text = normalize_text(text)
 
-            prompt_data = torch.load(ref_path, map_location="cpu", weights_only=False)
-            ref_audio = prompt_data.get("ref_audio_path", "")
-            ref_text = prompt_data.get("ref_text", "")
+            prompt_data = None
+            try:
+                prompt_data = torch.load(ref_path, map_location="cpu", weights_only=False)
+            except Exception:
+                pass
+
+            ref_text_prompt = ""
+            if isinstance(prompt_data, dict):
+                ref_text_prompt = prompt_data.get("ref_text", "")
+
+            ref_audio = ref_path.replace("embedding.pt", "sample.wav")
+            if not os.path.exists(ref_audio) and isinstance(prompt_data, dict):
+                ref_audio = prompt_data.get("ref_audio_path", "")
 
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as out_tmp:
                 out_path = out_tmp.name
 
-            self._model.tts(text=text, ref_audio=ref_audio, ref_text=ref_text, output_path=out_path)
+            self._model.tts(text=text, ref_audio=ref_audio, ref_text=ref_text_prompt, output_path=out_path)
 
             audio_data, sr = sf.read(out_path)
             all_audio.append(audio_data)

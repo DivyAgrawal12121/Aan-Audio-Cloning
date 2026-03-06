@@ -84,9 +84,19 @@ class CosyVoiceEngine(BaseEngine):
         language = kwargs.get("language", "English")
         emotion = kwargs.get("emotion", "neutral")
 
-        prompt_data = torch.load(embedding_path, map_location="cpu", weights_only=False)
-        ref_audio = prompt_data.get("ref_audio_path", "")
-        ref_text = prompt_data.get("ref_text", "")
+        prompt_data = None
+        try:
+            prompt_data = torch.load(embedding_path, map_location="cpu", weights_only=False)
+        except Exception:
+            pass
+
+        ref_text = ""
+        if isinstance(prompt_data, dict):
+            ref_text = prompt_data.get("ref_text", "")
+
+        ref_audio = embedding_path.replace("embedding.pt", "sample.wav")
+        if not os.path.exists(ref_audio) and isinstance(prompt_data, dict):
+            ref_audio = prompt_data.get("ref_audio_path", "")
         
         text = normalize_text(text)
 
