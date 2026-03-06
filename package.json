@@ -1,0 +1,13 @@
+{
+  "name": "voxforge",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @voxforge/web dev",
+    "dev:api": "cd apps/api && python -m uvicorn main:app --reload --port 8000",
+    "build": "pnpm --filter @voxforge/web build",
+    "lint": "pnpm --filter @voxforge/web lint"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

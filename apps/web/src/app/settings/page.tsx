@@ -2,12 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Settings, Server, Cpu, HardDrive, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
-
-interface HealthData {
-    status: string;
-    model_loaded: boolean;
-    device: string;
-}
+import type { HealthData } from "@/lib/types";
 
 export default function SettingsPage() {
     const [backendUrl, setBackendUrl] = useState("http://localhost:8000");
@@ -135,8 +130,8 @@ export default function SettingsPage() {
                             ? "rgba(34, 197, 94, 0.06)"
                             : "rgba(239, 68, 68, 0.06)",
                         border: `1px solid ${isConnected
-                                ? "rgba(34, 197, 94, 0.15)"
-                                : "rgba(239, 68, 68, 0.15)"
+                            ? "rgba(34, 197, 94, 0.15)"
+                            : "rgba(239, 68, 68, 0.15)"
                             }`,
                         display: "flex",
                         alignItems: "center",
@@ -257,10 +252,10 @@ export default function SettingsPage() {
                                 style={{
                                     fontWeight: 600,
                                     fontSize: "1rem",
-                                    color: health.model_loaded ? "#22c55e" : "#f59e0b",
+                                    color: health.active_model ? "#22c55e" : "#f59e0b",
                                 }}
                             >
-                                {health.model_loaded ? "Loaded" : "Not Loaded"}
+                                {health.active_model || "Not Loaded"}
                             </p>
                         </div>
                     </div>
@@ -306,7 +301,7 @@ export default function SettingsPage() {
                         }}
                     >
                         <div style={{ color: "var(--text-muted)" }}># 1. Navigate to backend</div>
-                        <div>cd backend</div>
+                        <div>cd apps/api</div>
                         <br />
                         <div style={{ color: "var(--text-muted)" }}># 2. Install dependencies</div>
                         <div>pip install -r requirements.txt</div>

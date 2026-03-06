@@ -294,7 +294,7 @@ class EngineManager:
                     if hf_model_id.lower().replace("/", "--") in str(repo_info.repo_id).lower().replace("/", "--"):
                         cached = True
                         break
-            except:
+            except Exception:
                 pass
 
             if cached:

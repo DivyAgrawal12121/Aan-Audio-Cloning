@@ -1,35 +1,48 @@
-# Python
+# ============================================
+# VoxForge — Git Ignore
+# ============================================
+
+# ---- Python ----
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ---- Virtual Environments ----
 venv/
-env/
-.env
-.env.*
 .venv/
+env/
 
-# Backend Data (Large Audio/Embedding Files)
-backend/data/
-backend/*.wav
-backend/*.mp3
-backend/*.ogg
-backend/test_out.wav
+# ---- Backend Data ----
+apps/api/data/
 
-# Next.js / Node
-frontend/node_modules/
-frontend/.next/
-frontend/out/
+# ---- Node.js ----
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+.next/
+out/
 
-# Mac/OSX
-.DS_Store
+# ---- Environment ----
+.env
+.env.local
+.env.*.local
 
-# IDEs
-.idea/
+# ---- Lockfiles (npm) ----
+package-lock.json
+
+# ---- IDE ----
 .vscode/
+.idea/
+*.swp
+*.swo
 
-# Build logs
-*.log
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Audio artifacts ----
+*.wav
+*.mp3
+*.flac
