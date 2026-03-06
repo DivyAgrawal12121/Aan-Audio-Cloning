@@ -43,7 +43,8 @@ class F5Engine(BaseEngine):
             from f5_tts.api import F5TTS
 
             # Explicitly check if model init fails on this device
-            self._model = F5TTS(model_type="F5-TTS", device=self.device)
+            # The correct parameter name is 'model', and the default config is 'F5TTS_v1_Base'
+            self._model = F5TTS(model="F5TTS_v1_Base", device=self.device)
             
             if os.environ.get("TTS_COMPILE", "0") == "1":
                 logger.info("Compiling F5-TTS model graph for optimized inference...")
@@ -62,7 +63,7 @@ class F5Engine(BaseEngine):
                 try:
                     self.device = "cpu"
                     from f5_tts.api import F5TTS
-                    self._model = F5TTS(model_type="F5-TTS", device="cpu")
+                    self._model = F5TTS(model="F5TTS_v1_Base", device="cpu")
                     self._loaded = True
                     logger.info("F5-TTS loaded successfully on CPU fallback.")
                 except Exception as e2:
