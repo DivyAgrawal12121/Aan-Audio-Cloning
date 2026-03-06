@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import AudioPlayer from "@/components/AudioPlayer";
 import VoiceCard from "@/components/VoiceCard";
+import ProgressBar from "@/components/ProgressBar";
 import {
     SUPPORTED_LANGUAGES,
     EMOTIONS,
@@ -351,6 +352,14 @@ export default function GeneratePage() {
                     </div>
 
                     {/* Generate Button */}
+                    <ProgressBar
+                        progress={generationProgress}
+                        isActive={isGenerating}
+                        label={isGenerating ? "Synthesizing speech..." : "Generation complete!"}
+                        accentColor="#06b6d4"
+                        accentColorEnd="#8b5cf6"
+                    />
+
                     <button
                         className="glow-btn"
                         onClick={() => {

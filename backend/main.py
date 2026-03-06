@@ -17,11 +17,11 @@ import os
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, FileResponse
+from fastapi.responses import Response, FileResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 
-from tts_engine import get_engine
+from engine_manager import get_manager
 from voice_store import (
     save_voice,
     get_all_voices,
@@ -92,12 +92,63 @@ async def root():
 
 @app.get("/health")
 async def health():
-    engine = get_engine()
+    manager = get_manager()
+    engine = manager.get_current_engine()
     return {
         "status": "ok",
-        "model_loaded": engine._loaded,
-        "device": engine.device,
+        "active_model": manager.active_model_id,
+        "device": engine.device if engine else None,
     }
+
+# ==============================
+# Model Management
+# ==============================
+@app.get("/api/models")
+async def list_models():
+    """List all available AI audio models and their current load status."""
+    manager = get_manager()
+    models = manager.get_available_models()
+    return {
+        "active": manager.active_model_id,
+        "models": models
+    }
+
+class LoadModelRequest(BaseModel):
+    model_id: str
+
+@app.post("/api/models/load")
+async def load_model_endpoint(req: LoadModelRequest):
+    """Dynamically switch and load an engine into VRAM."""
+    manager = get_manager()
+    try:
+        engine = manager.load_model(req.model_id)
+        return {"status": "success", "model": req.model_id, "device": engine.device}
+    except Exception as e:
+        logger.error(f"Failed to load model {req.model_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/models/load-stream")
+async def load_model_stream(model_id: str):
+    """
+    SSE endpoint that streams real-time progress while loading a model.
+    Usage: GET /api/models/load-stream?model_id=qwen-1.7b
+    """
+    manager = get_manager()
+
+    def event_generator():
+        for progress in manager.load_model_with_progress(model_id):
+            yield progress.to_sse()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ==============================
@@ -132,8 +183,9 @@ async def clone_voice(
     if len(audio_bytes) == 0:
         raise HTTPException(400, "Empty audio file")
 
-    # Clone voice using the new qwen_tts engine
-    engine = get_engine()
+    # Clone voice using the active manager engine
+    manager = get_manager()
+    engine = manager.get_current_engine()
     clone_result = engine.clone_voice(audio_bytes)
     embedding_bytes = clone_result["prompt_bytes"]
 
@@ -165,7 +217,8 @@ async def design_voice(req: DesignVoiceRequest):
     """Create a new voice from a text description."""
     logger.info(f"Designing voice: {req.name}")
 
-    engine = get_engine()
+    manager = get_manager()
+    engine = manager.get_current_engine()
 
     # Generate design audio and use it to create a clone prompt
     design_audio = engine.design_voice(
@@ -208,8 +261,8 @@ async def generate_speech(req: GenerateRequest):
     if not embedding_path:
         raise HTTPException(404, f"Voice embedding not found: {req.voiceId}")
 
-    # Generate audio
-    engine = get_engine()
+    manager = get_manager()
+    engine = manager.get_current_engine()
     audio_bytes = engine.generate_speech(
         text=req.text,
         embedding_path=embedding_path,
@@ -243,7 +296,8 @@ async def preview_voice(req: PreviewRequest):
     if not embedding_path:
         raise HTTPException(404, f"Voice embedding not found: {req.voiceId}")
 
-    engine = get_engine()
+    manager = get_manager()
+    engine = manager.get_current_engine()
     audio_bytes = engine.generate_speech(
         text=req.text,
         embedding_path=embedding_path,
@@ -290,12 +344,131 @@ async def get_voice_sample(voice_id: str):
     return FileResponse(sample_path, media_type="audio/wav")
 
 
+# ==============================
+# Foley / Sound Effects
+# ==============================
+class FoleyRequest(BaseModel):
+    description: str
+
+@app.post("/api/foley")
+async def generate_foley(req: FoleyRequest):
+    """Generate sound effects from a text description (requires Bark)."""
+    logger.info(f"Foley generation: {req.description[:60]}")
+    manager = get_manager()
+    engine = manager.get_current_engine()
+    try:
+        audio_bytes = engine.generate_foley(req.description)
+        return Response(content=audio_bytes, media_type="audio/wav",
+                        headers={"Content-Disposition": "attachment; filename=foley.wav"})
+    except NotImplementedError:
+        raise HTTPException(400, f"The currently loaded model ({manager.active_model_id}) does not support foley generation. Switch to Bark.")
+
+
+# ==============================
+# Cross-Lingual Voice Dubbing
+# ==============================
+class DubbingRequest(BaseModel):
+    text: str
+    voiceId: str
+    sourceLang: str = "English"
+    targetLang: str = "Hindi"
+
+@app.post("/api/dubbing")
+async def cross_lingual_dub(req: DubbingRequest):
+    """Clone voice and generate speech in a different language."""
+    logger.info(f"Dubbing: {req.voiceId} from {req.sourceLang} to {req.targetLang}")
+    voice = get_voice(req.voiceId)
+    if not voice:
+        raise HTTPException(404, f"Voice not found: {req.voiceId}")
+
+    sample_path = get_voice_sample_path(req.voiceId)
+    if not sample_path:
+        raise HTTPException(404, "No audio sample available for dubbing")
+
+    with open(sample_path, "rb") as f:
+        audio_bytes = f.read()
+
+    manager = get_manager()
+    engine = manager.get_current_engine()
+    try:
+        dubbed_audio = engine.cross_lingual_clone(
+            audio_bytes=audio_bytes,
+            text=req.text,
+            source_lang=req.sourceLang,
+            target_lang=req.targetLang,
+        )
+        return Response(content=dubbed_audio, media_type="audio/wav",
+                        headers={"Content-Disposition": "attachment; filename=dubbed.wav"})
+    except NotImplementedError:
+        raise HTTPException(400, f"The currently loaded model ({manager.active_model_id}) does not support cross-lingual dubbing. Switch to CosyVoice or XTTS v2.")
+
+
+# ==============================
+# Podcast Auto-Generation
+# ==============================
+class PodcastRequest(BaseModel):
+    script: str
+    voiceIdA: str
+    voiceIdB: str
+
+@app.post("/api/podcast")
+async def generate_podcast(req: PodcastRequest):
+    """Generate a multi-speaker podcast from a script."""
+    logger.info("Generating podcast...")
+    voice_a_path = get_voice_embedding_path(req.voiceIdA)
+    voice_b_path = get_voice_embedding_path(req.voiceIdB)
+    if not voice_a_path or not voice_b_path:
+        raise HTTPException(404, "One or both voice embeddings not found")
+
+    manager = get_manager()
+    engine = manager.get_current_engine()
+    try:
+        audio_bytes = engine.generate_podcast(
+            script=req.script,
+            voice_a_path=voice_a_path,
+            voice_b_path=voice_b_path,
+        )
+        return Response(content=audio_bytes, media_type="audio/wav",
+                        headers={"Content-Disposition": "attachment; filename=podcast.wav"})
+    except NotImplementedError:
+        raise HTTPException(400, f"The currently loaded model ({manager.active_model_id}) does not support podcast generation. Switch to F5-TTS or Fish Speech.")
+
+
+# ==============================
+# Audio In-Painting
+# ==============================
+@app.post("/api/inpaint")
+async def audio_inpaint(
+    audio: UploadFile = File(...),
+    original_text: str = Form(...),
+    corrected_text: str = Form(...),
+):
+    """Replace a segment of audio with corrected version, keeping same voice."""
+    logger.info(f"Audio inpainting: '{original_text}' -> '{corrected_text}'")
+    audio_bytes = await audio.read()
+    if len(audio_bytes) == 0:
+        raise HTTPException(400, "Empty audio file")
+
+    manager = get_manager()
+    engine = manager.get_current_engine()
+    try:
+        inpainted = engine.audio_inpaint(
+            audio_bytes=audio_bytes,
+            original_text=original_text,
+            corrected_text=corrected_text,
+        )
+        return Response(content=inpainted, media_type="audio/wav",
+                        headers={"Content-Disposition": "attachment; filename=inpainted.wav"})
+    except NotImplementedError:
+        raise HTTPException(400, f"The currently loaded model ({manager.active_model_id}) does not support audio in-painting.")
+
+
 # ---- Startup ----
 @app.on_event("startup")
 async def startup():
     logger.info("=" * 60)
     logger.info("  VoxForge API Server Starting")
-    logger.info("  Model: Qwen3-TTS 1.7B INT8")
+    logger.info("  Multi-Model Architecture v2.0")
     logger.info("=" * 60)
     # Optionally pre-load the model (uncomment to load eagerly)
     # get_engine()._ensure_loaded()

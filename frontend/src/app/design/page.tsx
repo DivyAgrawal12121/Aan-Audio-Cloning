@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Sparkles, Loader2, Wand2, CheckCircle2, AlertCircle } from "lucide-react";
 import AudioPlayer from "@/components/AudioPlayer";
+import ProgressBar from "@/components/ProgressBar";
 import { SUPPORTED_LANGUAGES } from "@/lib/types";
 import { designVoice, previewVoice } from "@/lib/api";
 
@@ -367,6 +368,14 @@ export default function DesignPage() {
             )}
 
             {/* Generate Button */}
+            <ProgressBar
+                progress={designProgress}
+                isActive={isDesigning}
+                label={isDesigning ? "Designing new voice from description..." : "Design complete!"}
+                accentColor="#ec4899"
+                accentColorEnd="#f59e0b"
+            />
+
             <button
                 className="glow-btn"
                 onClick={handleDesign}

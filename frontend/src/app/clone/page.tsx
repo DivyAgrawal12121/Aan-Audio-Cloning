@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Mic, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import AudioUploader from "@/components/AudioUploader";
 import AudioPlayer from "@/components/AudioPlayer";
+import ProgressBar from "@/components/ProgressBar";
 import { SUPPORTED_LANGUAGES } from "@/lib/types";
 import { cloneVoice } from "@/lib/api";
 
@@ -298,6 +299,14 @@ export default function ClonePage() {
             )}
 
             {/* Clone Button */}
+            <ProgressBar
+                progress={cloneProgress}
+                isActive={isCloning}
+                label={isCloning ? "Extracting voice embedding..." : "Clone complete!"}
+                accentColor="#8b5cf6"
+                accentColorEnd="#6366f1"
+            />
+
             <button
                 className="glow-btn"
                 onClick={handleClone}
