@@ -89,7 +89,7 @@ export default function ClonePage() {
     }, [isCloning, cloneProgress]);
 
     return (
-        <div style={{ maxWidth: "800px" }}>
+        <div className="page-container-sm">
             {/* Header */}
             <div style={{ marginBottom: "36px" }}>
                 <div

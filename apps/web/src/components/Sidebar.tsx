@@ -178,11 +178,15 @@ export default function Sidebar() {
                 })}
             </nav>
 
+            {/* Spacer */}
+            <div style={{ minHeight: "16px" }} />
+
             {/* Footer */}
             <div
                 style={{
-                    padding: "14px 20px",
+                    padding: "16px 20px",
                     borderTop: "1px solid var(--border-subtle)",
+                    marginTop: "auto",
                     display: "flex",
                     alignItems: "center",
                     gap: "8px",

@@ -26,7 +26,7 @@ export default function LogsPage() {
     }, []);
 
     return (
-        <div style={{ maxWidth: "1000px" }}>
+        <div className="page-container-lg">
             {/* Header */}
             <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
@@ -65,7 +65,7 @@ export default function LogsPage() {
 
             {/* Log Console */}
             <div
-                className="glass-card"
+                className="glass-card no-hover-lift"
                 style={{
                     padding: "16px",
                     background: "#020617",

@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Podcast, Loader2, Download } from "lucide-react";
+import { Podcast, Loader2 } from "lucide-react";
+import AudioPlayer from "@/components/AudioPlayer";
 import ProgressBar from "@/components/ProgressBar";
 
 const EXAMPLE_SCRIPT = `A: Welcome to VoxForge Podcast! Today we discuss the future of AI voice technology.
@@ -58,27 +59,50 @@ export default function PodcastPage() {
     };
 
     return (
-        <div style={{ maxWidth: 850, margin: "0 auto" }}>
-            <div className="page-header">
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
-                    <Podcast size={24} color="#f59e0b" />
-                    <h1 style={{ background: "linear-gradient(135deg, #f59e0b, #ef4444)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                        Podcast Auto-Generation
-                    </h1>
+        <div className="page-container-md" style={{ maxWidth: "850px" }}>
+            {/* Header */}
+            <div className="page-hero">
+                <div
+                    className="page-hero-badge"
+                    style={{
+                        background: "linear-gradient(135deg, #f59e0b, #ef4444)",
+                        boxShadow: "0 8px 24px rgba(245, 158, 11, 0.25)",
+                    }}
+                >
+                    <Podcast size={22} color="white" />
                 </div>
-                <p>Write a two-speaker script and generate a full podcast. Requires <strong style={{ color: "var(--text-secondary)" }}>F5-TTS</strong> or <strong style={{ color: "var(--text-secondary)" }}>Fish Speech</strong>.</p>
+                <div>
+                    <h1>Podcast Auto-Generation</h1>
+                    <p>
+                        Write a two-speaker script and generate a full podcast. Requires{" "}
+                        <strong style={{ color: "var(--text-primary)" }}>F5-TTS</strong> or{" "}
+                        <strong style={{ color: "var(--text-primary)" }}>Fish Speech</strong>.
+                    </p>
+                </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "16px" }}>
-                <div className="form-card" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ color: "#f59e0b" }}>🎤 Speaker A</label>
+            {/* Model Requirement Banner */}
+            <div className="feature-banner warning">
+                <div className="feature-banner-icon" style={{ background: "rgba(245, 158, 11, 0.12)" }}>
+                    <Podcast size={18} color="#f59e0b" />
+                </div>
+                <div className="feature-banner-content">
+                    <p>
+                        This feature requires <strong>F5-TTS</strong> or <strong>Fish Speech</strong> to be loaded.
+                        Switch models from the sidebar if you&apos;re using a different engine.
+                    </p>
+                </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+                <div className="section-card" style={{ marginBottom: 0 }}>
+                    <p className="section-label" style={{ color: "#f59e0b" }}>🎤 Speaker A</p>
                     <select value={voiceA} onChange={e => setVoiceA(e.target.value)} className="select-field">
                         <option value="">Select voice...</option>
                         {voices.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
                     </select>
                 </div>
-                <div className="form-card" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ color: "#ef4444" }}>🎤 Speaker B</label>
+                <div className="section-card" style={{ marginBottom: 0 }}>
+                    <p className="section-label" style={{ color: "#ef4444" }}>🎤 Speaker B</p>
                     <select value={voiceB} onChange={e => setVoiceB(e.target.value)} className="select-field">
                         <option value="">Select voice...</option>
                         {voices.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -86,10 +110,14 @@ export default function PodcastPage() {
                 </div>
             </div>
 
-            <div className="form-card">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                    <label className="form-label" style={{ marginBottom: 0 }}>Podcast Script</label>
-                    <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "3px 8px", borderRadius: "6px" }}>
+            {/* Script Input */}
+            <div className="section-card">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                    <p className="section-label" style={{ marginBottom: 0 }}>Podcast Script</p>
+                    <span style={{
+                        fontSize: "0.65rem", color: "var(--text-muted)",
+                        background: "rgba(255,255,255,0.04)", padding: "4px 10px", borderRadius: "6px",
+                    }}>
                         Prefix lines with &quot;A:&quot; or &quot;B:&quot;
                     </span>
                 </div>
@@ -97,6 +125,7 @@ export default function PodcastPage() {
                     style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace", fontSize: "0.85rem" }} />
             </div>
 
+            {/* Progress */}
             <ProgressBar
                 progress={progress}
                 isActive={isGenerating}
@@ -105,20 +134,46 @@ export default function PodcastPage() {
                 accentColorEnd="#ef4444"
             />
 
-            <button onClick={handleGenerate} disabled={isGenerating || !voiceA || !voiceB || !script.trim()} className="gen-btn"
-                style={{ background: isGenerating ? "rgba(245,158,11,0.3)" : "linear-gradient(135deg, #f59e0b, #ef4444)" }}>
-                <span className="btn-content">
-                    {isGenerating ? <><Loader2 size={16} className="spin" /> Generating Podcast...</> : <><Podcast size={16} /> Generate Podcast Episode</>}
-                </span>
+            {/* Generate Button */}
+            <button
+                onClick={handleGenerate}
+                disabled={isGenerating || !voiceA || !voiceB || !script.trim()}
+                className="glow-btn"
+                style={{
+                    width: "100%",
+                    padding: "16px",
+                    fontSize: "1rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "10px",
+                    background: "linear-gradient(135deg, #f59e0b, #ef4444)",
+                }}
+            >
+                {isGenerating ? (
+                    <>
+                        <Loader2 size={18} className="pulse-glow" style={{ animation: "pulse-glow 1s ease-in-out infinite" }} />
+                        Generating Podcast... {Math.round(progress)}%
+                    </>
+                ) : (
+                    <>
+                        <Podcast size={18} />
+                        Generate Podcast Episode
+                    </>
+                )}
             </button>
 
-            {error && <div className="error-box">⚠️ {error}</div>}
+            {/* Error */}
+            {error && (
+                <div className="status-alert error" style={{ marginTop: "16px" }}>
+                    <span style={{ fontSize: "0.88rem", color: "#ef4444" }}>⚠️ {error}</span>
+                </div>
+            )}
 
+            {/* Result */}
             {audioUrl && (
-                <div className="result-card">
-                    <h3>🎙️ Generated Podcast</h3>
-                    <audio src={audioUrl} controls />
-                    <a href={audioUrl} download="podcast.wav" className="download-link"><Download size={14} /> Download Episode</a>
+                <div className="result-section">
+                    <AudioPlayer audioUrl={audioUrl} label="Generated Podcast" showDownload />
                 </div>
             )}
         </div>

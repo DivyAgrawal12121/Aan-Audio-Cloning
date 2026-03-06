@@ -114,7 +114,7 @@ export default function GeneratePage() {
     const charCount = text.length;
 
     return (
-        <div style={{ maxWidth: "1100px" }}>
+        <div className="page-container">
             {/* Header */}
             <div style={{ marginBottom: "36px" }}>
                 <div

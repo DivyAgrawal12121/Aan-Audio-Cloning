@@ -99,7 +99,7 @@ export default function DesignPage() {
     }, [isDesigning, designProgress]);
 
     return (
-        <div style={{ maxWidth: "800px" }}>
+        <div className="page-container-sm">
             {/* Header */}
             <div style={{ marginBottom: "36px" }}>
                 <div

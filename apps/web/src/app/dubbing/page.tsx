@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Languages, Loader2, Download } from "lucide-react";
+import { Languages, Loader2 } from "lucide-react";
+import AudioPlayer from "@/components/AudioPlayer";
 import ProgressBar from "@/components/ProgressBar";
 
 const LANGUAGES = ["English", "Hindi", "French", "Spanish", "German", "Japanese", "Chinese", "Korean", "Arabic", "Portuguese", "Italian", "Turkish", "Russian"];
@@ -53,43 +54,78 @@ export default function DubbingPage() {
     };
 
     return (
-        <div style={{ maxWidth: 780, margin: "0 auto" }}>
-            <div className="page-header">
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
-                    <Languages size={24} color="#3b82f6" />
-                    <h1 style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                        Cross-Lingual Voice Dubbing
-                    </h1>
+        <div className="page-container-sm">
+            {/* Header */}
+            <div className="page-hero">
+                <div
+                    className="page-hero-badge"
+                    style={{
+                        background: "linear-gradient(135deg, #3b82f6, #8b5cf6)",
+                        boxShadow: "0 8px 24px rgba(59, 130, 246, 0.25)",
+                    }}
+                >
+                    <Languages size={22} color="white" />
                 </div>
-                <p>Clone your voice and have it speak another language. Requires <strong style={{ color: "var(--text-secondary)" }}>CosyVoice</strong> or <strong style={{ color: "var(--text-secondary)" }}>XTTS v2</strong>.</p>
+                <div>
+                    <h1>Cross-Lingual Voice Dubbing</h1>
+                    <p>
+                        Clone your voice and have it speak another language. Requires{" "}
+                        <strong style={{ color: "var(--text-primary)" }}>CosyVoice</strong> or{" "}
+                        <strong style={{ color: "var(--text-primary)" }}>XTTS v2</strong>.
+                    </p>
+                </div>
             </div>
 
-            <div className="form-card">
-                <label className="form-label">Select a Cloned Voice</label>
-                <select value={selectedVoice} onChange={e => setSelectedVoice(e.target.value)} className="select-field" style={{ marginBottom: "16px" }}>
+            {/* Model Requirement Banner */}
+            <div className="feature-banner info">
+                <div className="feature-banner-icon" style={{ background: "rgba(59, 130, 246, 0.12)" }}>
+                    <Languages size={18} color="#3b82f6" />
+                </div>
+                <div className="feature-banner-content">
+                    <p>
+                        This feature requires <strong>CosyVoice</strong> or <strong>XTTS v2</strong> to be loaded.
+                        Switch models from the sidebar if you&apos;re using a different engine.
+                    </p>
+                </div>
+            </div>
+            <div className="section-card">
+                <p className="section-label">Select a Cloned Voice</p>
+                <select value={selectedVoice} onChange={e => setSelectedVoice(e.target.value)} className="select-field">
                     <option value="">Choose a voice...</option>
                     {voices.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
                 </select>
+            </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "16px" }}>
+            {/* Language Pair */}
+            <div className="section-card">
+                <p className="section-label">Language Pair</p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "12px" }}>
                     <div>
-                        <label className="form-label">Source Language</label>
+                        <label style={{ display: "block", fontSize: "0.82rem", color: "var(--text-secondary)", marginBottom: "6px", fontWeight: 500 }}>
+                            Source Language
+                        </label>
                         <select value={sourceLang} onChange={e => setSourceLang(e.target.value)} className="select-field">
                             {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label className="form-label">Target Language</label>
+                        <label style={{ display: "block", fontSize: "0.82rem", color: "var(--text-secondary)", marginBottom: "6px", fontWeight: 500 }}>
+                            Target Language
+                        </label>
                         <select value={targetLang} onChange={e => setTargetLang(e.target.value)} className="select-field">
                             {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
                         </select>
                     </div>
                 </div>
+            </div>
 
-                <label className="form-label">Text to Speak in Target Language</label>
+            {/* Text Input */}
+            <div className="section-card">
+                <p className="section-label">Text to Speak in Target Language</p>
                 <textarea value={text} onChange={e => setText(e.target.value)} rows={4} placeholder="Enter the text..." className="text-area" />
             </div>
 
+            {/* Progress */}
             <ProgressBar
                 progress={progress}
                 isActive={isGenerating}
@@ -98,20 +134,46 @@ export default function DubbingPage() {
                 accentColorEnd="#8b5cf6"
             />
 
-            <button onClick={handleDub} disabled={isGenerating || !selectedVoice || !text.trim()} className="gen-btn"
-                style={{ background: isGenerating ? "rgba(59,130,246,0.3)" : "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}>
-                <span className="btn-content">
-                    {isGenerating ? <><Loader2 size={16} className="spin" /> Dubbing...</> : <><Languages size={16} /> Generate Dubbed Audio</>}
-                </span>
+            {/* Generate Button */}
+            <button
+                onClick={handleDub}
+                disabled={isGenerating || !selectedVoice || !text.trim()}
+                className="glow-btn"
+                style={{
+                    width: "100%",
+                    padding: "16px",
+                    fontSize: "1rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "10px",
+                    background: "linear-gradient(135deg, #3b82f6, #8b5cf6)",
+                }}
+            >
+                {isGenerating ? (
+                    <>
+                        <Loader2 size={18} className="pulse-glow" style={{ animation: "pulse-glow 1s ease-in-out infinite" }} />
+                        Dubbing... {Math.round(progress)}%
+                    </>
+                ) : (
+                    <>
+                        <Languages size={18} />
+                        Generate Dubbed Audio
+                    </>
+                )}
             </button>
 
-            {error && <div className="error-box">⚠️ {error}</div>}
+            {/* Error */}
+            {error && (
+                <div className="status-alert error" style={{ marginTop: "16px" }}>
+                    <span style={{ fontSize: "0.88rem", color: "#ef4444" }}>⚠️ {error}</span>
+                </div>
+            )}
 
+            {/* Result */}
             {audioUrl && (
-                <div className="result-card">
-                    <h3>🌐 Dubbed Audio</h3>
-                    <audio src={audioUrl} controls />
-                    <a href={audioUrl} download="dubbed.wav" className="download-link"><Download size={14} /> Download WAV</a>
+                <div className="result-section">
+                    <AudioPlayer audioUrl={audioUrl} label="Dubbed Audio" showDownload />
                 </div>
             )}
         </div>

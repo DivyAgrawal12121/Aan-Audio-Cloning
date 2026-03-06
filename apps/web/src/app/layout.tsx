@@ -48,9 +48,10 @@ export default function RootLayout({
             style={{
               flex: 1,
               marginLeft: "var(--sidebar-width)",
-              padding: "32px 40px",
+              padding: "32px 40px 60px",
               maxWidth: "calc(100vw - var(--sidebar-width))",
               overflowY: "auto",
+              transition: "margin-left 0.3s ease",
             }}
           >
             {children}

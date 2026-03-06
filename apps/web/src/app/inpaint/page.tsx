@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Eraser, Upload, Loader2, Download } from "lucide-react";
+import { Eraser, Upload, Loader2, Sparkles } from "lucide-react";
+import AudioPlayer from "@/components/AudioPlayer";
 import ProgressBar from "@/components/ProgressBar";
 
 export default function InpaintPage() {
@@ -55,19 +56,40 @@ export default function InpaintPage() {
     };
 
     return (
-        <div style={{ maxWidth: 780, margin: "0 auto" }}>
-            <div className="page-header">
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
-                    <Eraser size={24} color="#ec4899" />
-                    <h1 style={{ background: "linear-gradient(135deg, #ec4899, #8b5cf6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                        Audio In-Painting
-                    </h1>
+        <div className="page-container-sm">
+            {/* Header */}
+            <div className="page-hero">
+                <div
+                    className="page-hero-badge"
+                    style={{
+                        background: "linear-gradient(135deg, #ec4899, #8b5cf6)",
+                        boxShadow: "0 8px 24px rgba(236, 72, 153, 0.25)",
+                    }}
+                >
+                    <Eraser size={22} color="white" />
                 </div>
-                <p>Upload a recording where the speaker stumbled. The AI will seamlessly fix it.</p>
+                <div>
+                    <h1>Audio In-Painting</h1>
+                    <p>Upload a recording where the speaker stumbled. The AI will seamlessly fix it.</p>
+                </div>
             </div>
 
-            <div className="form-card">
-                <label className="form-label">Upload Audio File</label>
+            {/* Coming Soon Banner */}
+            <div className="coming-soon-banner">
+                <span className="coming-soon-badge">
+                    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                        <Sparkles size={12} /> Coming Soon
+                    </span>
+                </span>
+                <p>
+                    Audio in-painting is actively being developed. No engine currently supports this feature —
+                    once a compatible model is added, this page will be fully functional. The UI is ready for when it ships!
+                </p>
+            </div>
+
+            {/* Upload Section */}
+            <div className="section-card">
+                <p className="section-label">Upload Audio File</p>
                 <div onClick={() => fileRef.current?.click()} className={`dropzone ${audioFile ? "has-file" : ""}`} style={{ padding: "28px" }}>
                     <Upload size={22} color="var(--text-muted)" style={{ marginBottom: "6px" }} />
                     <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
@@ -76,26 +98,27 @@ export default function InpaintPage() {
                     <input ref={fileRef} type="file" accept="audio/*" onChange={handleFileChange} style={{ display: "none" }} />
                 </div>
                 {previewUrl && (
-                    <div style={{ marginTop: "12px" }}>
-                        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: "6px" }}>Original Audio:</p>
-                        <audio src={previewUrl} controls style={{ width: "100%", borderRadius: "8px" }} />
+                    <div style={{ marginTop: "16px" }}>
+                        <AudioPlayer audioUrl={previewUrl} label="Original Audio" showDownload={false} />
                     </div>
                 )}
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "16px" }}>
-                <div className="form-card" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ color: "#ef4444" }}>❌ Original Text (what was said badly)</label>
+            {/* Text Comparison */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+                <div className="section-card" style={{ marginBottom: 0 }}>
+                    <p className="section-label" style={{ color: "#ef4444" }}>❌ Original Text (what was said badly)</p>
                     <textarea value={originalText} onChange={e => setOriginalText(e.target.value)} rows={3}
                         placeholder='e.g., I really enj... um... enjoyed the movie' className="text-area" />
                 </div>
-                <div className="form-card" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ color: "#22c55e" }}>✅ Corrected Text (what it should say)</label>
+                <div className="section-card" style={{ marginBottom: 0 }}>
+                    <p className="section-label" style={{ color: "#22c55e" }}>✅ Corrected Text (what it should say)</p>
                     <textarea value={correctedText} onChange={e => setCorrectedText(e.target.value)} rows={3}
                         placeholder="e.g., I really enjoyed the movie" className="text-area" />
                 </div>
             </div>
 
+            {/* Progress */}
             <ProgressBar
                 progress={progress}
                 isActive={isProcessing}
@@ -104,20 +127,46 @@ export default function InpaintPage() {
                 accentColorEnd="#8b5cf6"
             />
 
-            <button onClick={handleInpaint} disabled={isProcessing || !audioFile || !originalText.trim() || !correctedText.trim()} className="gen-btn"
-                style={{ background: isProcessing ? "rgba(236,72,153,0.3)" : "linear-gradient(135deg, #ec4899, #8b5cf6)" }}>
-                <span className="btn-content">
-                    {isProcessing ? <><Loader2 size={16} className="spin" /> Processing...</> : <><Eraser size={16} /> Fix Audio</>}
-                </span>
+            {/* Generate Button */}
+            <button
+                onClick={handleInpaint}
+                disabled={isProcessing || !audioFile || !originalText.trim() || !correctedText.trim()}
+                className="glow-btn"
+                style={{
+                    width: "100%",
+                    padding: "16px",
+                    fontSize: "1rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "10px",
+                    background: "linear-gradient(135deg, #ec4899, #8b5cf6)",
+                }}
+            >
+                {isProcessing ? (
+                    <>
+                        <Loader2 size={18} className="pulse-glow" style={{ animation: "pulse-glow 1s ease-in-out infinite" }} />
+                        Processing... {Math.round(progress)}%
+                    </>
+                ) : (
+                    <>
+                        <Eraser size={18} />
+                        Fix Audio
+                    </>
+                )}
             </button>
 
-            {error && <div className="error-box">⚠️ {error}</div>}
+            {/* Error */}
+            {error && (
+                <div className="status-alert error" style={{ marginTop: "16px" }}>
+                    <span style={{ fontSize: "0.88rem", color: "#ef4444" }}>⚠️ {error}</span>
+                </div>
+            )}
 
+            {/* Result */}
             {audioUrl && (
-                <div className="result-card">
-                    <h3>✨ Corrected Audio</h3>
-                    <audio src={audioUrl} controls />
-                    <a href={audioUrl} download="inpainted.wav" className="download-link"><Download size={14} /> Download Fixed Audio</a>
+                <div className="result-section">
+                    <AudioPlayer audioUrl={audioUrl} label="Corrected Audio" showDownload />
                 </div>
             )}
         </div>

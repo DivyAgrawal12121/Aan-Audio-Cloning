@@ -30,7 +30,7 @@ export default function SettingsPage() {
     }, []);
 
     return (
-        <div style={{ maxWidth: "700px" }}>
+        <div className="page-container-sm" style={{ maxWidth: "700px" }}>
             {/* Header */}
             <div style={{ marginBottom: "36px" }}>
                 <div

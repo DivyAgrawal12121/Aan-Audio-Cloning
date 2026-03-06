@@ -64,7 +64,7 @@ export default function VoicesPage() {
     );
 
     return (
-        <div style={{ maxWidth: "900px" }}>
+        <div className="page-container-md">
             {/* Header */}
             <div style={{ marginBottom: "36px" }}>
                 <div

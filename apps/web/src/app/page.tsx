@@ -83,7 +83,7 @@ const STATS = [
 
 export default function DashboardPage() {
   return (
-    <div style={{ maxWidth: "1100px" }}>
+    <div className="page-container">
       {/* Hero */}
       <div style={{ marginBottom: "40px" }}>
         <div
@@ -136,7 +136,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "36px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "14px", marginBottom: "36px" }}>
         {STATS.map(({ label, value, icon: Icon }) => (
           <div key={label} className="glass-card" style={{ padding: "18px", textAlign: "center" }}>
             <Icon size={18} style={{ color: "var(--accent-purple)", marginBottom: "6px" }} />
@@ -152,7 +152,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Feature Cards in 2-column grid  */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "16px" }}>
         {FEATURES.map(({ icon: Icon, title, desc, href, gradient, glow }) => (
           <Link key={href} href={href} style={{ textDecoration: "none" }}>
             <div
