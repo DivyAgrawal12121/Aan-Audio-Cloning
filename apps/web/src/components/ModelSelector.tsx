@@ -404,8 +404,9 @@ export default function ModelSelector() {
 
                             {/* Model Grid */}
                             <div style={{
-                                padding: "20px 24px", overflowY: "auto", flex: 1,
-                                display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px",
+                                padding: "20px 24px", overflowY: "auto", flex: 1, minHeight: 0,
+                                display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "14px",
+                                alignContent: "start",
                             }}>
                                 {Object.entries(models).map(([id, model]) => {
                                     const isActive = id === activeModelId;
@@ -413,136 +414,140 @@ export default function ModelSelector() {
                                     const vramColor = getVramColor(model.vram_estimate);
 
                                     return (
-                                        <button
-                                            key={id}
-                                            onClick={() => handleSelectModel(id)}
-                                            disabled={isLoading}
-                                            style={{
-                                                display: "flex", flexDirection: "column",
-                                                padding: "18px 20px",
-                                                background: isThisLoading
-                                                    ? `linear-gradient(135deg, ${PHASE_COLORS[loadProgress?.phase || "downloading"]}08, transparent)`
-                                                    : isActive
-                                                        ? "linear-gradient(135deg, rgba(139,92,246,0.1), rgba(6,182,212,0.04))"
-                                                        : "rgba(255,255,255,0.015)",
-                                                border: isThisLoading
-                                                    ? `1.5px solid ${PHASE_COLORS[loadProgress?.phase || "downloading"]}40`
-                                                    : isActive
-                                                        ? "1.5px solid rgba(139,92,246,0.35)"
-                                                        : "1px solid rgba(255,255,255,0.06)",
-                                                borderRadius: "14px", color: "white",
-                                                cursor: isLoading ? "not-allowed" : "pointer",
-                                                textAlign: "left", transition: "all 0.25s ease",
-                                                position: "relative", overflow: "hidden",
-                                                opacity: isLoading && !isThisLoading && !isActive ? 0.4 : 1,
-                                            }}
-                                            onMouseEnter={e => {
-                                                if (!isActive && !isLoading) {
-                                                    e.currentTarget.style.background = "rgba(139,92,246,0.06)";
-                                                    e.currentTarget.style.borderColor = "rgba(139,92,246,0.2)";
-                                                    e.currentTarget.style.transform = "translateY(-1px)";
-                                                }
-                                            }}
-                                            onMouseLeave={e => {
-                                                if (!isActive && !isThisLoading) {
-                                                    e.currentTarget.style.background = "rgba(255,255,255,0.015)";
-                                                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
-                                                    e.currentTarget.style.transform = "translateY(0)";
-                                                }
-                                            }}
-                                        >
-                                            {/* Active glow */}
-                                            {(isActive || isThisLoading) && (
-                                                <div style={{
-                                                    position: "absolute", top: "-15px", right: "-15px",
-                                                    width: "70px", height: "70px",
+                                        <div key={id} style={{ display: "flex" }}>
+                                            <button
+
+                                                onClick={() => handleSelectModel(id)}
+                                                disabled={isLoading}
+                                                style={{
+                                                    display: "flex", flexDirection: "column",
+                                                    padding: "20px 22px",
+                                                    width: "100%",
                                                     background: isThisLoading
-                                                        ? `${PHASE_COLORS[loadProgress?.phase || "downloading"]}30`
-                                                        : "rgba(139,92,246,0.2)",
-                                                    borderRadius: "50%", filter: "blur(25px)", pointerEvents: "none",
-                                                }} />
-                                            )}
+                                                        ? `linear-gradient(135deg, ${PHASE_COLORS[loadProgress?.phase || "downloading"]}08, transparent)`
+                                                        : isActive
+                                                            ? "linear-gradient(135deg, rgba(139,92,246,0.1), rgba(6,182,212,0.04))"
+                                                            : "rgba(255,255,255,0.015)",
+                                                    border: isThisLoading
+                                                        ? `1.5px solid ${PHASE_COLORS[loadProgress?.phase || "downloading"]}40`
+                                                        : isActive
+                                                            ? "1.5px solid rgba(139,92,246,0.35)"
+                                                            : "1px solid rgba(255,255,255,0.06)",
+                                                    borderRadius: "14px", color: "white",
+                                                    cursor: isLoading ? "not-allowed" : "pointer",
+                                                    textAlign: "left", transition: "all 0.25s ease",
+                                                    position: "relative",
+                                                    opacity: isLoading && !isThisLoading && !isActive ? 0.4 : 1,
+                                                }}
+                                                onMouseEnter={e => {
+                                                    if (!isActive && !isLoading) {
+                                                        e.currentTarget.style.background = "rgba(139,92,246,0.06)";
+                                                        e.currentTarget.style.borderColor = "rgba(139,92,246,0.2)";
+                                                        e.currentTarget.style.transform = "translateY(-1px)";
+                                                    }
+                                                }}
+                                                onMouseLeave={e => {
+                                                    if (!isActive && !isThisLoading) {
+                                                        e.currentTarget.style.background = "rgba(255,255,255,0.015)";
+                                                        e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
+                                                        e.currentTarget.style.transform = "translateY(0)";
+                                                    }
+                                                }}
+                                            >
+                                                {/* Active glow */}
+                                                {(isActive || isThisLoading) && (
+                                                    <div style={{
+                                                        position: "absolute", top: "-15px", right: "-15px",
+                                                        width: "70px", height: "70px",
+                                                        background: isThisLoading
+                                                            ? `${PHASE_COLORS[loadProgress?.phase || "downloading"]}30`
+                                                            : "rgba(139,92,246,0.2)",
+                                                        borderRadius: "50%", filter: "blur(25px)", pointerEvents: "none",
+                                                    }} />
+                                                )}
 
-                                            {/* Name + Status */}
-                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: "8px", position: "relative" }}>
-                                                <span style={{ fontSize: "0.92rem", fontWeight: 700, color: isActive ? "#c4b5fd" : "#e2e8f0" }}>
-                                                    {model.name}
-                                                </span>
-                                                {isActive && !isThisLoading && (
-                                                    <span style={{
-                                                        display: "inline-flex", alignItems: "center", gap: "3px",
-                                                        fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.03em",
-                                                        color: "#4ade80", background: "rgba(34,197,94,0.12)",
-                                                        padding: "3px 9px", borderRadius: "10px",
-                                                        border: "1px solid rgba(34,197,94,0.2)",
-                                                    }}>
-                                                        <Check size={10} strokeWidth={3} /> LOADED
+                                                {/* Name + Status */}
+                                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: "8px", position: "relative" }}>
+                                                    <span style={{ fontSize: "0.92rem", fontWeight: 700, color: isActive ? "#c4b5fd" : "#e2e8f0" }}>
+                                                        {model.name}
                                                     </span>
-                                                )}
-                                                {isThisLoading && (
-                                                    <Loader2 size={16} className="spin" color={PHASE_COLORS[loadProgress?.phase || "downloading"]} />
-                                                )}
-                                            </div>
-
-                                            {/* Description */}
-                                            <p style={{ fontSize: "0.76rem", color: "#94a3b8", lineHeight: 1.45, marginBottom: "12px", flex: 1 }}>
-                                                {model.description}
-                                            </p>
-
-                                            {/* VRAM + Download badges */}
-                                            <div style={{ display: "flex", gap: "6px", marginBottom: "10px" }}>
-                                                <div style={{
-                                                    display: "inline-flex", alignItems: "center", gap: "4px",
-                                                    fontSize: "0.68rem", fontWeight: 600,
-                                                    color: vramColor, background: `${vramColor}14`,
-                                                    padding: "4px 10px", borderRadius: "6px",
-                                                    border: `1px solid ${vramColor}25`,
-                                                }}>
-                                                    <HardDrive size={11} /> {model.vram_estimate}
+                                                    {isActive && !isThisLoading && (
+                                                        <span style={{
+                                                            display: "inline-flex", alignItems: "center", gap: "3px",
+                                                            fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.03em",
+                                                            color: "#4ade80", background: "rgba(34,197,94,0.12)",
+                                                            padding: "3px 9px", borderRadius: "10px",
+                                                            border: "1px solid rgba(34,197,94,0.2)",
+                                                        }}>
+                                                            <Check size={10} strokeWidth={3} /> LOADED
+                                                        </span>
+                                                    )}
+                                                    {isThisLoading && (
+                                                        <Loader2 size={16} className="spin" color={PHASE_COLORS[loadProgress?.phase || "downloading"]} />
+                                                    )}
                                                 </div>
-                                                {model.download_size && (
+
+                                                {/* Description */}
+                                                <p style={{ fontSize: "0.76rem", color: "#94a3b8", lineHeight: 1.5, marginBottom: "14px", flex: 1 }}>
+                                                    {model.description}
+                                                </p>
+
+                                                {/* VRAM + Download badges */}
+                                                <div style={{ display: "flex", gap: "8px", marginBottom: "10px", flexWrap: "wrap" }}>
                                                     <div style={{
                                                         display: "inline-flex", alignItems: "center", gap: "4px",
-                                                        fontSize: "0.68rem", fontWeight: 500,
-                                                        color: "#64748b", background: "rgba(255,255,255,0.03)",
+                                                        fontSize: "0.68rem", fontWeight: 600,
+                                                        color: vramColor, background: `${vramColor}14`,
                                                         padding: "4px 10px", borderRadius: "6px",
-                                                        border: "1px solid rgba(255,255,255,0.05)",
+                                                        border: `1px solid ${vramColor}25`,
                                                     }}>
-                                                        <Download size={11} /> {model.download_size}
+                                                        <HardDrive size={11} /> {model.vram_estimate}
+                                                    </div>
+                                                    {model.download_size && (
+                                                        <div style={{
+                                                            display: "inline-flex", alignItems: "center", gap: "4px",
+                                                            fontSize: "0.68rem", fontWeight: 500,
+                                                            color: "#64748b", background: "rgba(255,255,255,0.03)",
+                                                            padding: "4px 10px", borderRadius: "6px",
+                                                            border: "1px solid rgba(255,255,255,0.05)",
+                                                        }}>
+                                                            <Download size={11} /> {model.download_size}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Capability Tags */}
+                                                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                                                    {(model.capabilities || []).map(cap => {
+                                                        const s = CAP_STYLE[cap] || { label: cap, color: "#94a3b8", bg: "rgba(148,163,184,0.1)" };
+                                                        return (
+                                                            <span key={cap} style={{
+                                                                fontSize: "0.62rem", fontWeight: 600,
+                                                                padding: "3px 8px", borderRadius: "5px",
+                                                                color: s.color, background: s.bg,
+                                                            }}>
+                                                                {s.label}
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
+
+                                                {/* Per-card mini progress bar when this specific model is loading */}
+                                                {isThisLoading && loadProgress && (
+                                                    <div style={{
+                                                        position: "absolute", bottom: 0, left: 0, right: 0, height: "3px",
+                                                        background: "rgba(255,255,255,0.05)", overflow: "hidden",
+                                                        borderRadius: "0 0 14px 14px",
+                                                    }}>
+                                                        <div style={{
+                                                            height: "100%", width: `${loadProgress.percent}%`,
+                                                            background: PHASE_COLORS[loadProgress.phase] || "#8b5cf6",
+                                                            transition: "width 0.4s ease",
+                                                        }} />
                                                     </div>
                                                 )}
-                                            </div>
-
-                                            {/* Capability Tags */}
-                                            <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
-                                                {(model.capabilities || []).map(cap => {
-                                                    const s = CAP_STYLE[cap] || { label: cap, color: "#94a3b8", bg: "rgba(148,163,184,0.1)" };
-                                                    return (
-                                                        <span key={cap} style={{
-                                                            fontSize: "0.62rem", fontWeight: 600,
-                                                            padding: "3px 8px", borderRadius: "5px",
-                                                            color: s.color, background: s.bg,
-                                                        }}>
-                                                            {s.label}
-                                                        </span>
-                                                    );
-                                                })}
-                                            </div>
-
-                                            {/* Per-card mini progress bar when this specific model is loading */}
-                                            {isThisLoading && loadProgress && (
-                                                <div style={{
-                                                    position: "absolute", bottom: 0, left: 0, right: 0, height: "3px",
-                                                    background: "rgba(255,255,255,0.05)",
-                                                }}>
-                                                    <div style={{
-                                                        height: "100%", width: `${loadProgress.percent}%`,
-                                                        background: PHASE_COLORS[loadProgress.phase] || "#8b5cf6",
-                                                        transition: "width 0.4s ease",
-                                                    }} />
-                                                </div>
-                                            )}
-                                        </button>
+                                            </button>
+                                        </div>
                                     );
                                 })}
                             </div>
