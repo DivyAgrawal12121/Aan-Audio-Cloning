@@ -35,22 +35,43 @@ class F5Engine(BaseEngine):
     def load(self):
         if self._loaded:
             return
-        logger.info(f"Loading F5-TTS model: {self.model_id}")
+        
+        device_status = "Available" if torch.cuda.is_available() else "NOT Available"
+        logger.info(f"Loading F5-TTS model: {self.model_id}. Device: {self.device}. CUDA {device_status}")
+        
         try:
             from f5_tts.api import F5TTS
 
+            # Explicitly check if model init fails on this device
             self._model = F5TTS(model_type="F5-TTS", device=self.device)
             
             if os.environ.get("TTS_COMPILE", "0") == "1":
                 logger.info("Compiling F5-TTS model graph for optimized inference...")
-                self._model.model = torch.compile(self._model.model, mode="reduce-overhead")
+                try:
+                    self._model.model = torch.compile(self._model.model, mode="reduce-overhead")
+                except Exception as ce:
+                    logger.warning(f"F5-TTS compilation failed: {ce}")
                 
             self._loaded = True
             logger.info("F5-TTS loaded successfully!")
         except Exception as e:
-            logger.error(f"Failed to load F5-TTS: {e}", exc_info=True)
-            self._loaded = True
-            self._model = None
+            logger.error(f"CRITICAL: Failed to load F5-TTS on {self.device}: {e}", exc_info=True)
+            # Try fallback to CPU if CUDA failed
+            if self.device == "cuda":
+                logger.info("Retrying F5-TTS loading on CPU...")
+                try:
+                    self.device = "cpu"
+                    from f5_tts.api import F5TTS
+                    self._model = F5TTS(model_type="F5-TTS", device="cpu")
+                    self._loaded = True
+                    logger.info("F5-TTS loaded successfully on CPU fallback.")
+                except Exception as e2:
+                    logger.error(f"F5-TTS fallback to CPU also failed: {e2}")
+                    self._model = None
+                    self._loaded = True
+            else:
+                self._loaded = True
+                self._model = None
 
     def unload(self):
         logger.info("Unloading F5-TTS...")
@@ -157,14 +178,22 @@ class F5Engine(BaseEngine):
             self._model.infer(ref_file=ref_audio, ref_text=ref_text, gen_text=text, file_wave=out_path, speed=1.0)
 
             audio_data, sr = sf.read(out_path)
+            # Ensure float32 for consistency
+            audio_data = audio_data.astype(np.float32)
             all_audio.append(audio_data)
             os.unlink(out_path)
 
             # Add a small pause between turns
-            pause = np.zeros(int(self.SAMPLE_RATE * 0.5))
+            pause = np.zeros(int(self.SAMPLE_RATE * 0.5), dtype=np.float32)
             all_audio.append(pause)
 
         combined = np.concatenate(all_audio)
+        
+        # Audio Post-processing
+        combined = np.nan_to_num(combined)
+        if np.abs(combined).max() > 0:
+            combined = combined / np.abs(combined).max() * 0.95
+
         buffer = io.BytesIO()
         sf.write(buffer, combined, self.SAMPLE_RATE, format="WAV")
         buffer.seek(0)

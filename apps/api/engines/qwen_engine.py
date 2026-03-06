@@ -156,9 +156,10 @@ class QwenEngine(BaseEngine):
                 x_vector_only_mode=True,
             )
 
-        audio_array = wavs[0]
         if isinstance(audio_array, torch.Tensor):
-            audio_array = audio_array.cpu().numpy()
+            audio_array = audio_array.to(torch.float32).cpu().numpy()
+        else:
+            audio_array = audio_array.astype(np.float32)
 
         buffer = io.BytesIO()
         sf.write(buffer, audio_array, sr, format="WAV")
@@ -191,9 +192,10 @@ class QwenEngine(BaseEngine):
             x_vector_only_mode=True,
         )
 
-        audio_array = wavs[0]
         if isinstance(audio_array, torch.Tensor):
-            audio_array = audio_array.cpu().numpy()
+            audio_array = audio_array.to(torch.float32).cpu().numpy()
+        else:
+            audio_array = audio_array.astype(np.float32)
 
         buffer = io.BytesIO()
         sf.write(buffer, audio_array, sr, format="WAV")

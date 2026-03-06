@@ -1,4 +1,5 @@
 import io
+import os
 import gc
 import logging
 from typing import Optional, Dict
@@ -40,7 +41,7 @@ class ParlerEngine(BaseEngine):
 
             self._model = ParlerTTSForConditionalGeneration.from_pretrained(
                 self.model_id,
-                torch_dtype=torch.bfloat16 if self.device == "cuda" else torch.float32,
+                dtype=torch.bfloat16 if self.device == "cuda" else torch.float32,
             )
             if self.device == "cuda":
                 self._model = self._model.to("cuda")
@@ -103,7 +104,12 @@ class ParlerEngine(BaseEngine):
                 do_sample=True if temperature > 0 else False
             )
 
-        audio_array = generation.cpu().numpy().squeeze()
+        audio_array = generation.cpu().numpy().squeeze().astype(np.float32)
+
+        # Audio Post-processing to prevent clipping and noise
+        audio_array = np.nan_to_num(audio_array)
+        if np.abs(audio_array).max() > 0:
+            audio_array = audio_array / np.abs(audio_array).max() * 0.95
 
         buffer = io.BytesIO()
         sf.write(buffer, audio_array, self.SAMPLE_RATE, format="WAV")

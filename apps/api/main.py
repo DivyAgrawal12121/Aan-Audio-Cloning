@@ -172,6 +172,20 @@ async def load_model_endpoint(req: LoadModelRequest):
         logger.error(f"Failed to load model {req.model_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/models/unload")
+async def unload_model_endpoint(req: LoadModelRequest):
+    """Explicitly unload a model and free VRAM."""
+    manager = get_manager()
+    try:
+        success = manager.unload_model(req.model_id)
+        if success:
+            return {"status": "success", "message": f"Model {req.model_id} unloaded."}
+        else:
+            return {"status": "error", "message": f"Model {req.model_id} was not loaded."}
+    except Exception as e:
+        logger.error(f"Failed to unload model {req.model_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/models/load-stream")
 async def load_model_stream(model_id: str):

@@ -1,20 +1,19 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Music, Loader2, Wand2 } from "lucide-react";
+import { Music, Loader2, Wand2, Info } from "lucide-react";
 import AudioPlayer from "@/components/AudioPlayer";
-import ProgressBar from "@/components/ProgressBar";
 
 const PRESETS = [
-    "Forest ambiance with birds chirping",
-    "Crowd cheering at a stadium",
+    "Forest ambiance birds chirping",
+    "Crowd cheering stadium",
     "Dog barking aggressively",
-    "Thunder with heavy rain",
-    "Ocean waves on a beach",
-    "Busy cafe with coffee machine",
-    "Fire crackling in a fireplace",
+    "Thunder heavy rain",
+    "Ocean waves beach",
+    "Busy cafe coffee machine",
+    "Fire crackling fireplace",
     "Spaceship engine humming",
-    "Wind howling through a canyon",
+    "Wind howling canyon",
     "City traffic sounds",
 ];
 
@@ -37,7 +36,7 @@ export default function FoleyPage() {
             }), 400);
         } else if (progress > 0 && !isGenerating) {
             setProgress(100);
-            const t = setTimeout(() => setProgress(0), 1500);
+            const t = setTimeout(() => setProgress(0), 1000);
             return () => clearTimeout(t);
         }
         return () => clearInterval(interval);
@@ -67,105 +66,110 @@ export default function FoleyPage() {
     return (
         <div className="page-container-sm">
             {/* Header */}
-            <div className="page-hero">
+            <div className="page-hero" style={{ marginBottom: "32px" }}>
                 <div
-                    className="page-hero-badge"
                     style={{
-                        background: "linear-gradient(135deg, #10b981, #06b6d4)",
-                        boxShadow: "0 8px 24px rgba(16, 185, 129, 0.25)",
+                        width: 56, height: 56,
+                        background: "var(--accent-amber)",
+                        border: "var(--border-thick)",
+                        boxShadow: "4px 4px 0px #000",
+                        display: "flex", alignItems: "center", justifyContent: "center"
                     }}
                 >
-                    <Music size={22} color="white" />
+                    <Music size={26} color="black" strokeWidth={3} />
                 </div>
                 <div>
-                    <h1>Sound Effects Studio</h1>
-                    <p>
-                        Generate any sound effect by describing it. Requires the{" "}
-                        <strong style={{ color: "var(--text-primary)" }}>Bark</strong> model.
-                    </p>
+                    <h1 style={{ fontSize: "1.75rem", fontWeight: 900 }}>Sound Effects</h1>
+                    <p style={{ fontWeight: 600 }}>Generate foley by describing any sound.</p>
                 </div>
             </div>
 
-            {/* Model Requirement Banner */}
-            <div className="feature-banner info">
-                <div className="feature-banner-icon" style={{ background: "rgba(16, 185, 129, 0.12)" }}>
-                    <Music size={18} color="#10b981" />
-                </div>
-                <div className="feature-banner-content">
-                    <p>
-                        This feature requires the <strong>Bark</strong> model to be loaded.
-                        Switch models from the sidebar if you&apos;re using a different engine.
-                    </p>
-                </div>
+            {/* Hint Banner */}
+            <div className="glass-card" style={{
+                padding: "16px 20px",
+                marginBottom: "20px",
+                background: "var(--accent-cyan)",
+                display: "flex", gap: "12px", alignItems: "center",
+                borderRadius: "4px"
+            }}>
+                <Info size={20} strokeWidth={3} />
+                <p style={{ fontSize: "0.85rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Bark Engine Required • Switch in Sidebar
+                </p>
             </div>
-            <div className="section-card">
-                <p className="section-label">Describe the sound you want</p>
+
+            <div className="section-card" style={{ marginBottom: "20px" }}>
+                <p className="section-label" style={{ color: "#000", fontWeight: 900 }}>What sound do you need?</p>
                 <textarea
                     value={description}
                     onChange={e => setDescription(e.target.value)}
-                    placeholder="e.g., A thunderstorm with heavy rain and distant lightning..."
+                    placeholder="e.g. [dog barking], [laughter], rainforest at night..."
                     rows={3}
                     className="text-area"
+                    style={{ marginBottom: "16px" }}
                 />
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "14px" }}>
-                    <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "6px", width: "100%", fontWeight: 500 }}>
-                        Quick presets:
-                    </p>
+
+                <p style={{ fontSize: "0.7rem", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px" }}>Try these:</p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                     {PRESETS.map(p => (
-                        <button key={p} onClick={() => setDescription(p)} className="preset-chip">{p}</button>
+                        <button key={p} onClick={() => setDescription(p)} className="tag" style={{ border: "2px solid #000", cursor: "pointer" }}>
+                            {p}
+                        </button>
                     ))}
                 </div>
             </div>
 
-            {/* Progress */}
-            <ProgressBar
-                progress={progress}
-                isActive={isGenerating}
-                label={isGenerating ? "Generating sound effect..." : "Complete!"}
-                accentColor="#10b981"
-                accentColorEnd="#06b6d4"
-            />
+            {/* Generate Button with Progress */}
+            <div style={{ position: "relative", marginBottom: "20px" }}>
+                <button
+                    onClick={handleGenerate}
+                    disabled={isGenerating || !description.trim()}
+                    className="gen-btn"
+                    style={{
+                        width: "100%",
+                        padding: "18px",
+                        background: isGenerating ? "#fff" : "var(--accent-pink)",
+                    }}
+                >
+                    {isGenerating ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <Loader2 size={20} className="spin" strokeWidth={3} />
+                            <span>GENERATING... {Math.round(progress)}%</span>
+                        </div>
+                    ) : (
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <Wand2 size={20} strokeWidth={3} />
+                            <span>GENERATE SOUND</span>
+                        </div>
+                    )}
+                </button>
 
-            {/* Generate Button */}
-            <button
-                onClick={handleGenerate}
-                disabled={isGenerating || !description.trim()}
-                className="glow-btn"
-                style={{
-                    width: "100%",
-                    padding: "16px",
-                    fontSize: "1rem",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "10px",
-                    background: "linear-gradient(135deg, #10b981, #06b6d4)",
-                }}
-            >
-                {isGenerating ? (
-                    <>
-                        <Loader2 size={18} className="pulse-glow" style={{ animation: "pulse-glow 1s ease-in-out infinite" }} />
-                        Generating... {Math.round(progress)}%
-                    </>
-                ) : (
-                    <>
-                        <Wand2 size={18} />
-                        Generate Sound Effect
-                    </>
+                {isGenerating && (
+                    <div style={{
+                        position: "absolute", bottom: "-4px", left: "0", right: "4px", height: "8px",
+                        background: "#000", border: "2px solid #000", overflow: "hidden"
+                    }}>
+                        <div style={{
+                            width: `${progress}%`, height: "100%",
+                            background: "var(--accent-cyan)",
+                            transition: "width 0.3s ease"
+                        }} />
+                    </div>
                 )}
-            </button>
+            </div>
 
             {/* Error */}
             {error && (
-                <div className="status-alert error" style={{ marginTop: "16px" }}>
-                    <span style={{ fontSize: "0.88rem", color: "#ef4444" }}>⚠️ {error}</span>
+                <div className="glass-card" style={{ background: "#fee2e2", borderColor: "#ef4444", padding: "16px" }}>
+                    <p style={{ fontSize: "0.85rem", fontWeight: 800, color: "#ef4444" }}>⚠️ ERROR: {error.toUpperCase()}</p>
                 </div>
             )}
 
             {/* Result */}
             {audioUrl && (
-                <div className="result-section">
-                    <AudioPlayer audioUrl={audioUrl} label="Generated Sound" showDownload />
+                <div className="section-card" style={{ marginTop: "24px", animation: "slideInRight 0.3s ease", background: "var(--accent-green)" }}>
+                    <h3 style={{ marginBottom: "12px", color: "#000" }}>READY TO PLAY</h3>
+                    <AudioPlayer audioUrl={audioUrl} label="GENERATED FOLEY" showDownload />
                 </div>
             )}
         </div>

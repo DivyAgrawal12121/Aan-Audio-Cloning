@@ -1,16 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Podcast, Loader2 } from "lucide-react";
+import { Podcast, Loader2, Info, Mic2 } from "lucide-react";
 import AudioPlayer from "@/components/AudioPlayer";
-import ProgressBar from "@/components/ProgressBar";
 
 const EXAMPLE_SCRIPT = `A: Welcome to VoxForge Podcast! Today we discuss the future of AI voice technology.
 B: Thanks for having me! It's incredible how far voice cloning has come in just the past year.
 A: Absolutely. Just two years ago, you needed hours of training data. Now it's three seconds.
-B: The implications for content creation are mind-boggling. Podcasters, narrators, game developers...
-A: Let's dive into what this means for the industry. What's your take on ethical considerations?
-B: That's the big question. I think transparency is key — always disclose when AI voices are used.`;
+B: The implications for content creation are mind-boggling. Podcasters, narrators, game developers...`;
 
 export default function PodcastPage() {
     const [voices, setVoices] = useState<any[]>([]);
@@ -25,23 +22,11 @@ export default function PodcastPage() {
     useEffect(() => { fetch("http://localhost:8000/api/voices").then(r => r.json()).then(setVoices).catch(() => { }); }, []);
 
     useEffect(() => {
-        let interval: NodeJS.Timeout;
-        if (isGenerating) {
-            setProgress(0);
-            interval = setInterval(() => setProgress(p => {
-                if (p < 20) return p + Math.random() * 2.5;
-                if (p < 55) return p + Math.random() * 1.2;
-                if (p < 85) return p + Math.random() * 0.5;
-                if (p < 92) return p + Math.random() * 0.3;
-                return p;
-            }), 600);
-        } else if (progress > 0 && !isGenerating) {
-            setProgress(100);
-            const t = setTimeout(() => setProgress(0), 1500);
-            return () => clearTimeout(t);
+        if (isGenerating && progress < 95) {
+            const timer = setInterval(() => setProgress(p => Math.min(p + Math.random() * 4, 95)), 800);
+            return () => clearInterval(timer);
         }
-        return () => clearInterval(interval);
-    }, [isGenerating]);
+    }, [isGenerating, progress]);
 
     const handleGenerate = async () => {
         if (!voiceA || !voiceB || !script.trim()) return;
@@ -55,125 +40,112 @@ export default function PodcastPage() {
             const blob = await res.blob();
             setAudioUrl(URL.createObjectURL(blob));
         } catch (e: any) { setError(e.message); }
-        finally { setIsGenerating(false); }
+        finally { setProgress(100); setTimeout(() => { setIsGenerating(false); setProgress(0); }, 500); }
     };
 
     return (
         <div className="page-container-md" style={{ maxWidth: "850px" }}>
             {/* Header */}
-            <div className="page-hero">
-                <div
-                    className="page-hero-badge"
-                    style={{
-                        background: "linear-gradient(135deg, #f59e0b, #ef4444)",
-                        boxShadow: "0 8px 24px rgba(245, 158, 11, 0.25)",
-                    }}
-                >
-                    <Podcast size={22} color="white" />
+            <div className="page-hero" style={{ marginBottom: "32px" }}>
+                <div style={{ width: 56, height: 56, background: "var(--accent-amber)", border: "var(--border-thick)", boxShadow: "4px 4px 0px #000", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Podcast size={26} color="black" strokeWidth={3} />
                 </div>
                 <div>
-                    <h1>Podcast Auto-Generation</h1>
-                    <p>
-                        Write a two-speaker script and generate a full podcast. Requires{" "}
-                        <strong style={{ color: "var(--text-primary)" }}>F5-TTS</strong> or{" "}
-                        <strong style={{ color: "var(--text-primary)" }}>Fish Speech</strong>.
+                    <h1 style={{ fontSize: "1.75rem", fontWeight: 900 }}>Podcast Studio</h1>
+                    <p style={{ fontWeight: 600 }}>Create multi-speaker conversations in seconds.</p>
+                </div>
+            </div>
+
+            {/* Engine Banner */}
+            <div className="section-card" style={{ marginBottom: "20px", background: "var(--bg-secondary)", display: "flex", gap: "12px", alignItems: "start" }}>
+                <div style={{ width: 40, height: 40, background: "#000", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <Info size={20} color="var(--accent-amber)" strokeWidth={3} />
+                </div>
+                <div>
+                    <p style={{ fontSize: "0.85rem", fontWeight: 800, textTransform: "uppercase", marginBottom: "4px" }}>Compatible Models</p>
+                    <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)" }}>
+                        Requires <strong>F5-TTS</strong> or <strong>Fish Speech</strong>. These engines support high-fidelity speech synthesis.
                     </p>
                 </div>
             </div>
 
-            {/* Model Requirement Banner */}
-            <div className="feature-banner warning">
-                <div className="feature-banner-icon" style={{ background: "rgba(245, 158, 11, 0.12)" }}>
-                    <Podcast size={18} color="#f59e0b" />
-                </div>
-                <div className="feature-banner-content">
-                    <p>
-                        This feature requires <strong>F5-TTS</strong> or <strong>Fish Speech</strong> to be loaded.
-                        Switch models from the sidebar if you&apos;re using a different engine.
-                    </p>
-                </div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+            {/* Speaker Selection */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
                 <div className="section-card" style={{ marginBottom: 0 }}>
-                    <p className="section-label" style={{ color: "#f59e0b" }}>🎤 Speaker A</p>
+                    <p className="section-label" style={{ color: "var(--accent-pink)", display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Mic2 size={16} strokeWidth={3} /> SPEAKER A
+                    </p>
                     <select value={voiceA} onChange={e => setVoiceA(e.target.value)} className="select-field">
-                        <option value="">Select voice...</option>
-                        {voices.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                        <option value="">SELECT VOICE...</option>
+                        {voices.map((v: any) => <option key={v.id} value={v.id}>{v.name.toUpperCase()}</option>)}
                     </select>
                 </div>
                 <div className="section-card" style={{ marginBottom: 0 }}>
-                    <p className="section-label" style={{ color: "#ef4444" }}>🎤 Speaker B</p>
+                    <p className="section-label" style={{ color: "var(--accent-purple)", display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Mic2 size={16} strokeWidth={3} /> SPEAKER B
+                    </p>
                     <select value={voiceB} onChange={e => setVoiceB(e.target.value)} className="select-field">
-                        <option value="">Select voice...</option>
-                        {voices.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                        <option value="">SELECT VOICE...</option>
+                        {voices.map((v: any) => <option key={v.id} value={v.id}>{v.name.toUpperCase()}</option>)}
                     </select>
                 </div>
             </div>
 
             {/* Script Input */}
-            <div className="section-card">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                    <p className="section-label" style={{ marginBottom: 0 }}>Podcast Script</p>
-                    <span style={{
-                        fontSize: "0.65rem", color: "var(--text-muted)",
-                        background: "rgba(255,255,255,0.04)", padding: "4px 10px", borderRadius: "6px",
-                    }}>
-                        Prefix lines with &quot;A:&quot; or &quot;B:&quot;
+            <div className="section-card" style={{ marginBottom: "20px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                    <p className="section-label" style={{ marginBottom: 0, color: "#000" }}>Podcast Script</p>
+                    <span style={{ fontSize: "0.65rem", fontWeight: 900, background: "#000", color: "#fff", padding: "4px 10px" }}>
+                        USE "A:" AND "B:" PREFIXES
                     </span>
                 </div>
-                <textarea value={script} onChange={e => setScript(e.target.value)} rows={10} className="text-area"
-                    style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace", fontSize: "0.85rem" }} />
+                <textarea
+                    value={script}
+                    onChange={e => setScript(e.target.value)}
+                    rows={8}
+                    className="text-area"
+                    style={{ fontFamily: "'Courier New', monospace", fontSize: "0.9rem", fontWeight: 700 }}
+                />
             </div>
 
-            {/* Progress */}
-            <ProgressBar
-                progress={progress}
-                isActive={isGenerating}
-                label={isGenerating ? "Generating podcast conversation..." : "Complete!"}
-                accentColor="#f59e0b"
-                accentColorEnd="#ef4444"
-            />
-
-            {/* Generate Button */}
-            <button
-                onClick={handleGenerate}
-                disabled={isGenerating || !voiceA || !voiceB || !script.trim()}
-                className="glow-btn"
-                style={{
-                    width: "100%",
-                    padding: "16px",
-                    fontSize: "1rem",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "10px",
-                    background: "linear-gradient(135deg, #f59e0b, #ef4444)",
-                }}
-            >
-                {isGenerating ? (
-                    <>
-                        <Loader2 size={18} className="pulse-glow" style={{ animation: "pulse-glow 1s ease-in-out infinite" }} />
-                        Generating Podcast... {Math.round(progress)}%
-                    </>
-                ) : (
-                    <>
-                        <Podcast size={18} />
-                        Generate Podcast Episode
-                    </>
+            {/* Action */}
+            <div style={{ position: "relative", marginBottom: "32px" }}>
+                <button
+                    onClick={handleGenerate}
+                    disabled={isGenerating || !voiceA || !voiceB || !script.trim()}
+                    className="gen-btn"
+                    style={{ width: "100%", padding: "20px", background: isGenerating ? "#fff" : "var(--accent-amber)" }}
+                >
+                    {isGenerating ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <Loader2 size={20} className="spin" strokeWidth={3} />
+                            <span>RECORDING... {Math.round(progress)}%</span>
+                        </div>
+                    ) : (
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <Podcast size={20} strokeWidth={3} />
+                            <span>GENERATE FULL EPISODE</span>
+                        </div>
+                    )}
+                </button>
+                {isGenerating && (
+                    <div style={{ position: "absolute", bottom: "-4px", left: "0", right: "4px", height: "8px", background: "#000", border: "2px solid #000", overflow: "hidden" }}>
+                        <div style={{ width: `${progress}%`, height: "100%", background: "var(--accent-pink)", transition: "width 0.3s ease" }} />
+                    </div>
                 )}
-            </button>
+            </div>
 
             {/* Error */}
             {error && (
-                <div className="status-alert error" style={{ marginTop: "16px" }}>
-                    <span style={{ fontSize: "0.88rem", color: "#ef4444" }}>⚠️ {error}</span>
+                <div style={{ padding: "16px", marginBottom: "20px", background: "#fee2e2", border: "var(--border-thin)", boxShadow: "4px 4px 0px #000" }}>
+                    <p style={{ fontSize: "0.85rem", fontWeight: 900, color: "#ef4444" }}>⚠️ EXPORT FAILED: {error.toUpperCase()}</p>
                 </div>
             )}
 
             {/* Result */}
             {audioUrl && (
-                <div className="result-section">
-                    <AudioPlayer audioUrl={audioUrl} label="Generated Podcast" showDownload />
+                <div style={{ marginTop: "20px" }}>
+                    <AudioPlayer audioUrl={audioUrl} label="MASTERED EPISODE" showDownload />
                 </div>
             )}
         </div>

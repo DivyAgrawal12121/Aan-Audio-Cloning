@@ -227,10 +227,34 @@ class EngineManager:
         device = os.environ.get("TTS_DEVICE", None)
         new_engine = engine_class(device=device, model_id=model_info.get("model_id"))
         new_engine.load()
-
         self.active_model_id = model_id
         self.loaded_engines[model_id] = new_engine
         return new_engine
+
+    def unload_model(self, model_id: str) -> bool:
+        """
+        Explicitly unloads a model from VRAM.
+        """
+        if model_id not in self.loaded_engines:
+            logger.warning(f"Model {model_id} not in loaded cache.")
+            return False
+
+        logger.info(f"Explicitly unloading model: {model_id}")
+        engine = self.loaded_engines.pop(model_id)
+        engine.unload()
+
+        if self.active_model_id == model_id:
+            self.active_model_id = None
+
+        gc.collect()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
+
+        return True
 
     # ─────────────────────────────────────
     #  Streaming load with progress

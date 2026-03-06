@@ -9,10 +9,10 @@ import {
     Timer,
     Plus,
     ChevronDown,
+    Wand2,
 } from "lucide-react";
 import AudioPlayer from "@/components/AudioPlayer";
 import VoiceCard from "@/components/VoiceCard";
-import ProgressBar from "@/components/ProgressBar";
 import {
     SUPPORTED_LANGUAGES,
     EMOTIONS,
@@ -45,33 +45,24 @@ export default function GeneratePage() {
         try {
             const data = await getVoices();
             setVoices(data);
-            if (data.length > 0 && !selectedVoice) {
-                setSelectedVoice(data[0]);
-            }
-        } catch {
-            // Backend not available — use demo data
-            setVoices([]);
-        }
+            if (data.length > 0 && !selectedVoice) setSelectedVoice(data[0]);
+        } catch { setVoices([]); }
     };
 
-    const insertParalinguistic = useCallback(
-        (tag: string) => {
-            setText((prev) => {
-                const textarea = document.querySelector("textarea");
-                if (textarea) {
-                    const start = textarea.selectionStart;
-                    const end = textarea.selectionEnd;
-                    return prev.substring(0, start) + " " + tag + " " + prev.substring(end);
-                }
-                return prev + " " + tag + " ";
-            });
-        },
-        []
-    );
+    const insertParalinguistic = useCallback((tag: string) => {
+        setText((prev) => {
+            const textarea = document.querySelector("textarea");
+            if (textarea) {
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                return prev.substring(0, start) + " " + tag + " " + prev.substring(end);
+            }
+            return prev + " " + tag + " ";
+        });
+    }, []);
 
     const handleGenerate = async () => {
         if (!text.trim() || !selectedVoice) return;
-
         setIsGenerating(true);
         setGenerationProgress(0);
         try {
@@ -85,566 +76,188 @@ export default function GeneratePage() {
                 duration: useDuration ? (duration ?? undefined) : undefined,
                 style: style || undefined,
             });
-
             if (outputUrl) URL.revokeObjectURL(outputUrl);
             setOutputUrl(URL.createObjectURL(blob));
-        } catch (err) {
-            console.error("Generation failed:", err);
-        } finally {
+        } catch (err) { console.error(err); }
+        finally {
             setGenerationProgress(100);
-            setTimeout(() => {
-                setIsGenerating(false);
-                setGenerationProgress(0);
-            }, 500);
+            setTimeout(() => { setIsGenerating(false); setGenerationProgress(0); }, 500);
         }
     };
 
     useEffect(() => {
         if (isGenerating && generationProgress < 95) {
-            const timer = setInterval(() => {
-                setGenerationProgress(prev => {
-                    const diff = Math.random() * 5;
-                    return Math.min(prev + diff, 95);
-                });
-            }, 800);
+            const timer = setInterval(() => setGenerationProgress(prev => Math.min(prev + Math.random() * 5, 95)), 800);
             return () => clearInterval(timer);
         }
     }, [isGenerating, generationProgress]);
 
-    const charCount = text.length;
-
     return (
         <div className="page-container">
             {/* Header */}
-            <div style={{ marginBottom: "36px" }}>
-                <div
-                    style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "14px",
-                        marginBottom: "12px",
-                    }}
-                >
-                    <div
-                        style={{
-                            width: 48,
-                            height: 48,
-                            borderRadius: "14px",
-                            background: "linear-gradient(135deg, #06b6d4, #3b82f6)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            boxShadow: "0 8px 24px rgba(6, 182, 212, 0.25)",
-                        }}
-                    >
-                        <Volume2 size={22} color="white" />
-                    </div>
-                    <div>
-                        <h1
-                            style={{
-                                fontSize: "1.8rem",
-                                fontWeight: 800,
-                                letterSpacing: "-0.02em",
-                            }}
-                        >
-                            Generate Speech
-                        </h1>
-                        <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)" }}>
-                            Convert text to ultra-realistic speech with full control
-                        </p>
-                    </div>
+            <div className="page-hero" style={{ marginBottom: "32px" }}>
+                <div style={{ width: 56, height: 56, background: "var(--accent-cyan)", border: "var(--border-thick)", boxShadow: "4px 4px 0px #000", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Volume2 size={26} color="black" strokeWidth={3} />
+                </div>
+                <div>
+                    <h1 style={{ fontSize: "1.75rem", fontWeight: 900 }}>Generate Speech</h1>
+                    <p style={{ fontWeight: 600 }}>Convert text to ultra-realistic AI speech.</p>
                 </div>
             </div>
 
-            <div
-                style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 340px",
-                    gap: "24px",
-                    alignItems: "start",
-                }}
-            >
-                {/* Left Column — Main Controls */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: "24px", alignItems: "start" }}>
+                {/* Left Column */}
                 <div>
                     {/* Voice Selection */}
-                    <div
-                        className="glass-card"
-                        style={{ padding: "20px 24px", marginBottom: "20px" }}
-                    >
-                        <div
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                marginBottom: "12px",
-                            }}
-                        >
-                            <p className="section-label" style={{ margin: 0 }}>
-                                Selected Voice
-                            </p>
+                    <div className="section-card" style={{ marginBottom: "20px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+                            <p className="section-label" style={{ margin: 0, color: "#000" }}>Selected Speaker</p>
                             <button
                                 onClick={() => setShowVoicePicker(!showVoicePicker)}
-                                style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "4px",
-                                    background: "none",
-                                    border: "none",
-                                    color: "var(--accent-purple)",
-                                    fontSize: "0.82rem",
-                                    fontWeight: 600,
-                                    cursor: "pointer",
-                                }}
+                                style={{ background: "var(--accent-purple)", border: "2px solid #000", padding: "4px 12px", fontSize: "0.75rem", fontWeight: 900, boxShadow: "2px 2px 0px #000", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
                             >
-                                Change <ChevronDown size={14} />
+                                {showVoicePicker ? "CLOSE" : "PICK VOICE"} <ChevronDown size={14} strokeWidth={3} />
                             </button>
                         </div>
 
                         {selectedVoice ? (
                             <VoiceCard voice={selectedVoice} isSelected compact />
                         ) : (
-                            <div
-                                style={{
-                                    padding: "20px",
-                                    textAlign: "center",
-                                    color: "var(--text-muted)",
-                                    fontSize: "0.88rem",
-                                }}
-                            >
-                                No voice selected.{" "}
-                                <a
-                                    href="/clone"
-                                    style={{
-                                        color: "var(--accent-purple)",
-                                        textDecoration: "underline",
-                                    }}
-                                >
-                                    Clone one first
-                                </a>
+                            <div className="glass-card" style={{ padding: "20px", textAlign: "center", background: "var(--bg-secondary)" }}>
+                                <p style={{ fontSize: "0.85rem", fontWeight: 700 }}>NONE SELECTED • <a href="/clone" style={{ color: "var(--accent-purple)" }}>CLONE FIRST</a></p>
                             </div>
                         )}
 
-                        {/* Voice Picker Dropdown */}
                         {showVoicePicker && voices.length > 0 && (
-                            <div
-                                style={{
-                                    marginTop: "12px",
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: "8px",
-                                    maxHeight: "240px",
-                                    overflowY: "auto",
-                                    padding: "4px 0",
-                                }}
-                            >
+                            <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "10px", maxHeight: "300px", overflowY: "auto", padding: "4px" }}>
                                 {voices.map((v) => (
-                                    <VoiceCard
-                                        key={v.id}
-                                        voice={v}
-                                        isSelected={selectedVoice?.id === v.id}
-                                        onSelect={(voice) => {
-                                            setSelectedVoice(voice);
-                                            setShowVoicePicker(false);
-                                        }}
-                                        compact
-                                    />
+                                    <VoiceCard key={v.id} voice={v} isSelected={selectedVoice?.id === v.id} onSelect={(voice) => { setSelectedVoice(voice); setShowVoicePicker(false); }} compact />
                                 ))}
                             </div>
                         )}
                     </div>
 
                     {/* Text Input */}
-                    <div
-                        className="glass-card"
-                        style={{ padding: "20px 24px", marginBottom: "20px" }}
-                    >
-                        <div
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                marginBottom: "12px",
-                            }}
-                        >
-                            <p className="section-label" style={{ margin: 0 }}>
-                                Script / Text
-                            </p>
-                            <span
-                                style={{
-                                    fontSize: "0.75rem",
-                                    color:
-                                        charCount > 5000
-                                            ? "#ef4444"
-                                            : "var(--text-muted)",
-                                }}
-                            >
-                                {charCount}/5000
-                            </span>
+                    <div className="section-card" style={{ marginBottom: "20px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                            <p className="section-label" style={{ margin: 0, color: "#000" }}>Script / Content</p>
+                            <span style={{ fontSize: "0.65rem", fontWeight: 900, background: "#000", color: "#fff", padding: "2px 6px" }}>{text.length}/5000</span>
                         </div>
                         <textarea
                             className="text-area"
-                            placeholder="Enter the text you want to convert to speech...&#10;&#10;You can use tags like (laughs), (sighs), (gasps) for paralinguistic effects."
+                            placeholder="Enter text to speak..."
                             value={text}
                             onChange={(e) => setText(e.target.value)}
                             maxLength={5000}
-                            style={{ minHeight: "180px" }}
+                            style={{ minHeight: "220px" }}
                         />
 
-                        {/* Paralinguistic Tags */}
-                        <div style={{ marginTop: "14px" }}>
-                            <p
-                                style={{
-                                    fontSize: "0.75rem",
-                                    color: "var(--text-muted)",
-                                    marginBottom: "8px",
-                                    fontWeight: 500,
-                                }}
-                            >
-                                Insert paralinguistic tags:
-                            </p>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                        <div style={{ marginTop: "16px" }}>
+                            <p style={{ fontSize: "0.7rem", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px" }}>Insert Effects:</p>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                                 {PARALINGUISTICS.map((tag) => (
-                                    <button
-                                        key={tag}
-                                        className="tag"
-                                        onClick={() => insertParalinguistic(tag)}
-                                    >
-                                        <Plus size={11} /> {tag}
+                                    <button key={tag} className="tag" onClick={() => insertParalinguistic(tag)} style={{ border: "2px solid #000", cursor: "pointer" }}>
+                                        <Plus size={11} strokeWidth={3} /> {tag}
                                     </button>
                                 ))}
                             </div>
                         </div>
                     </div>
 
-                    {/* Language */}
-                    <div
-                        className="glass-card"
-                        style={{ padding: "20px 24px", marginBottom: "20px" }}
-                    >
-                        <p className="section-label">Language</p>
-                        <div
-                            style={{
-                                display: "flex",
-                                flexWrap: "wrap",
-                                gap: "8px",
-                                marginTop: "8px",
-                            }}
+                    {/* Generate Button Container */}
+                    <div style={{ position: "relative", marginBottom: "20px" }}>
+                        <button
+                            className="gen-btn"
+                            onClick={handleGenerate}
+                            disabled={!text.trim() || !selectedVoice || isGenerating}
+                            style={{ width: "100%", padding: "20px", background: isGenerating ? "#fff" : "var(--accent-cyan)" }}
                         >
-                            {SUPPORTED_LANGUAGES.map((lang) => (
-                                <button
-                                    key={lang}
-                                    className={`tag ${language === lang ? "active" : ""}`}
-                                    onClick={() => setLanguage(lang)}
-                                >
-                                    {lang}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Output */}
-                    <div style={{ marginBottom: "20px" }}>
-                        <AudioPlayer
-                            audioUrl={outputUrl}
-                            label="Generated Output"
-                            showDownload
-                        />
-                    </div>
-
-                    {/* Generate Button */}
-                    <ProgressBar
-                        progress={generationProgress}
-                        isActive={isGenerating}
-                        label={isGenerating ? "Synthesizing speech..." : "Generation complete!"}
-                        accentColor="#06b6d4"
-                        accentColorEnd="#8b5cf6"
-                    />
-
-                    <button
-                        className="glow-btn"
-                        onClick={() => {
-                            setGenerationProgress(0);
-                            handleGenerate();
-                        }}
-                        disabled={!text.trim() || !selectedVoice || isGenerating}
-                        style={{
-                            width: "100%",
-                            padding: "16px",
-                            fontSize: "1rem",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: "10px",
-                            position: "relative",
-                            overflow: "hidden"
-                        }}
-                    >
+                            {isGenerating ? (
+                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                    <Loader2 size={20} className="spin" strokeWidth={3} />
+                                    <span>SYNTHESIZING... {Math.round(generationProgress)}%</span>
+                                </div>
+                            ) : (
+                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                    <Wand2 size={20} strokeWidth={3} />
+                                    <span>GENERATE SPEECH</span>
+                                </div>
+                            )}
+                        </button>
                         {isGenerating && (
-                            <div
-                                style={{
-                                    position: "absolute",
-                                    left: 0,
-                                    top: 0,
-                                    height: "100%",
-                                    width: `${generationProgress}%`,
-                                    background: "rgba(255, 255, 255, 0.15)",
-                                    transition: "width 0.5s ease"
-                                }}
-                            />
+                            <div style={{ position: "absolute", bottom: "-4px", left: "0", right: "4px", height: "8px", background: "#000", border: "2px solid #000", overflow: "hidden" }}>
+                                <div style={{ width: `${generationProgress}%`, height: "100%", background: "var(--accent-purple)", transition: "width 0.3s ease" }} />
+                            </div>
                         )}
-                        {isGenerating ? (
-                            <>
-                                <Loader2 size={18} className="pulse-glow" />
-                                Generating Audio... {generationProgress}%
-                            </>
-                        ) : (
-                            <>
-                                <Volume2 size={18} />
-                                Generate Speech
-                            </>
-                        )}
-                    </button>
+                    </div>
+
+                    <AudioPlayer audioUrl={outputUrl} label="OUTPUT PREVIEW" showDownload />
                 </div>
 
-                {/* Right Column — Settings Panel */}
-                <div
-                    style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "16px",
-                        position: "sticky",
-                        top: "32px",
-                    }}
-                >
+                {/* Right Column — Settings */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "20px", position: "sticky", top: "24px" }}>
                     {/* Emotion */}
-                    <div className="glass-card" style={{ padding: "20px" }}>
-                        <div
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "8px",
-                                marginBottom: "14px",
-                            }}
-                        >
-                            <Smile size={16} color="var(--accent-purple)" />
-                            <p className="section-label" style={{ margin: 0 }}>
-                                Emotion
-                            </p>
-                        </div>
-                        <div
-                            style={{
-                                display: "grid",
-                                gridTemplateColumns: "1fr 1fr",
-                                gap: "6px",
-                            }}
-                        >
+                    <div className="section-card" style={{ background: "var(--bg-secondary)" }}>
+                        <p className="section-label" style={{ display: "flex", alignItems: "center", gap: "8px", color: "#000" }}>
+                            <Smile size={16} strokeWidth={3} /> Emotion
+                        </p>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "12px" }}>
                             {EMOTIONS.map((em) => (
                                 <button
                                     key={em}
-                                    className={`tag ${emotion === em ? "active" : ""}`}
+                                    className="tag"
                                     onClick={() => setEmotion(em)}
                                     style={{
-                                        textTransform: "capitalize",
-                                        justifyContent: "center",
+                                        justifyContent: "center", border: "2px solid #000", cursor: "pointer",
+                                        background: emotion === em ? "var(--accent-pink)" : "#fff",
+                                        boxShadow: emotion === em ? "none" : "2px 2px 0px #000",
+                                        transform: emotion === em ? "translate(2px, 2px)" : "none"
                                     }}
                                 >
-                                    {em}
+                                    {em.toUpperCase()}
                                 </button>
                             ))}
                         </div>
                     </div>
 
+                    {/* Language Selection */}
+                    <div className="section-card">
+                        <p className="section-label" style={{ color: "#000" }}>Language</p>
+                        <select className="select-field" value={language} onChange={e => setLanguage(e.target.value)}>
+                            {SUPPORTED_LANGUAGES.map(lang => (
+                                <option key={lang} value={lang}>{lang}</option>
+                            ))}
+                        </select>
+                    </div>
+
                     {/* Speed & Pitch */}
-                    <div className="glass-card" style={{ padding: "20px" }}>
-                        <div
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "8px",
-                                marginBottom: "14px",
-                            }}
-                        >
-                            <Gauge size={16} color="var(--accent-purple)" />
-                            <p className="section-label" style={{ margin: 0 }}>
-                                Speed & Pitch
-                            </p>
-                        </div>
-
-                        <div style={{ marginBottom: "16px" }}>
-                            <div
-                                style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    marginBottom: "8px",
-                                }}
-                            >
-                                <span
-                                    style={{
-                                        fontSize: "0.82rem",
-                                        color: "var(--text-secondary)",
-                                    }}
-                                >
-                                    Speed
-                                </span>
-                                <span
-                                    style={{
-                                        fontSize: "0.82rem",
-                                        color: "var(--accent-purple)",
-                                        fontWeight: 600,
-                                        fontVariantNumeric: "tabular-nums",
-                                    }}
-                                >
-                                    {speed.toFixed(1)}x
-                                </span>
+                    <div className="section-card">
+                        <p className="section-label" style={{ display: "flex", alignItems: "center", gap: "8px", color: "#000" }}>
+                            <Gauge size={16} strokeWidth={3} /> Playback Logic
+                        </p>
+                        <div style={{ marginTop: "16px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                                <span style={{ fontSize: "0.75rem", fontWeight: 900 }}>SPEED: {speed}X</span>
                             </div>
-                            <input
-                                type="range"
-                                className="slider"
-                                min="0.5"
-                                max="2.0"
-                                step="0.1"
-                                value={speed}
-                                onChange={(e) => setSpeed(parseFloat(e.target.value))}
-                            />
+                            <input type="range" className="slider" min="0.5" max="2.0" step="0.1" value={speed} onChange={e => setSpeed(parseFloat(e.target.value))} />
                         </div>
-
-                        <div>
-                            <div
-                                style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    marginBottom: "8px",
-                                }}
-                            >
-                                <span
-                                    style={{
-                                        fontSize: "0.82rem",
-                                        color: "var(--text-secondary)",
-                                    }}
-                                >
-                                    Pitch
-                                </span>
-                                <span
-                                    style={{
-                                        fontSize: "0.82rem",
-                                        color: "var(--accent-purple)",
-                                        fontWeight: 600,
-                                        fontVariantNumeric: "tabular-nums",
-                                    }}
-                                >
-                                    {pitch.toFixed(1)}x
-                                </span>
+                        <div style={{ marginTop: "16px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                                <span style={{ fontSize: "0.75rem", fontWeight: 900 }}>PITCH: {pitch}X</span>
                             </div>
-                            <input
-                                type="range"
-                                className="slider"
-                                min="0.5"
-                                max="2.0"
-                                step="0.1"
-                                value={pitch}
-                                onChange={(e) => setPitch(parseFloat(e.target.value))}
-                            />
+                            <input type="range" className="slider" min="0.5" max="2.0" step="0.1" value={pitch} onChange={e => setPitch(parseFloat(e.target.value))} />
                         </div>
                     </div>
 
-                    {/* Duration Control */}
-                    <div className="glass-card" style={{ padding: "20px" }}>
-                        <div
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "8px",
-                                marginBottom: "14px",
-                            }}
-                        >
-                            <Timer size={16} color="var(--accent-purple)" />
-                            <p className="section-label" style={{ margin: 0 }}>
-                                Duration Control
-                            </p>
-                        </div>
-
-                        <div
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "10px",
-                                marginBottom: "12px",
-                            }}
-                        >
-                            <label
-                                style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "8px",
-                                    cursor: "pointer",
-                                    fontSize: "0.85rem",
-                                    color: "var(--text-secondary)",
-                                }}
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={useDuration}
-                                    onChange={(e) => setUseDuration(e.target.checked)}
-                                    style={{ accentColor: "var(--accent-purple)" }}
-                                />
-                                Force exact duration
-                            </label>
-                        </div>
-
-                        {useDuration && (
-                            <div>
-                                <div
-                                    style={{
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        marginBottom: "8px",
-                                    }}
-                                >
-                                    <span
-                                        style={{
-                                            fontSize: "0.82rem",
-                                            color: "var(--text-secondary)",
-                                        }}
-                                    >
-                                        Duration
-                                    </span>
-                                    <span
-                                        style={{
-                                            fontSize: "0.82rem",
-                                            color: "var(--accent-purple)",
-                                            fontWeight: 600,
-                                        }}
-                                    >
-                                        {(duration || 5).toFixed(1)}s
-                                    </span>
-                                </div>
-                                <input
-                                    type="range"
-                                    className="slider"
-                                    min="0.5"
-                                    max="30"
-                                    step="0.1"
-                                    value={duration || 5}
-                                    onChange={(e) =>
-                                        setDuration(parseFloat(e.target.value))
-                                    }
-                                />
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Style Instructions */}
-                    <div className="glass-card" style={{ padding: "20px" }}>
-                        <p className="section-label">Style Instructions</p>
+                    {/* Extra Instructions */}
+                    <div className="section-card" style={{ background: "var(--accent-amber)" }}>
+                        <p className="section-label" style={{ color: "#000" }}>Directives</p>
                         <textarea
                             className="text-area"
-                            placeholder="e.g., Speak slowly with a warm, soothing tone. Emphasize the last word of each sentence."
+                            placeholder="e.g. Speak fast, high energy..."
                             value={style}
                             onChange={(e) => setStyle(e.target.value)}
-                            style={{
-                                minHeight: "80px",
-                                fontSize: "0.85rem",
-                            }}
+                            style={{ minHeight: "80px", background: "#fff" }}
                         />
                     </div>
                 </div>

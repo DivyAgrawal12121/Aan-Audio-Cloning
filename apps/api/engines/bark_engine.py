@@ -1,4 +1,5 @@
 import io
+import os
 import gc
 import logging
 from typing import Optional, Dict
@@ -40,7 +41,7 @@ class BarkEngine(BaseEngine):
             self._processor = AutoProcessor.from_pretrained(self.model_id)
             self._model = BarkModel.from_pretrained(
                 self.model_id,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                dtype=torch.float16 if self.device == "cuda" else torch.float32,
             )
             if self.device == "cuda":
                 self._model = self._model.to("cuda")
@@ -84,10 +85,22 @@ class BarkEngine(BaseEngine):
         if self.device == "cuda":
             inputs = {k: v.to("cuda") for k, v in inputs.items()}
 
-        with torch.no_grad():
-            audio_array = self._model.generate(**inputs)
+        with torch.inference_mode():
+            audio_array = self._model.generate(
+                **inputs,
+                do_sample=True,
+                fine_temperature=0.4,
+                semantic_temperature=0.7,
+                coarse_temperature=0.7,
+                min_eos_p=0.05
+            )
 
-        audio_array = audio_array.cpu().numpy().squeeze()
+        audio_array = audio_array.cpu().numpy().squeeze().astype(np.float32)
+        
+        # Audio Post-processing to fix 'beep' and 'quality'
+        audio_array = np.nan_to_num(audio_array)
+        if np.abs(audio_array).max() > 0:
+            audio_array = audio_array / np.abs(audio_array).max() * 0.95
 
         buffer = io.BytesIO()
         sf.write(buffer, audio_array, self.SAMPLE_RATE, format="WAV")
@@ -100,17 +113,29 @@ class BarkEngine(BaseEngine):
         if self._model is None:
             raise RuntimeError("Bark failed to load.")
 
-        # Bark uses special tokens for non-speech: [laughter], [music], etc.
+        # Improved prompt for non-speech audio
         description = normalize_text(description)
-        prompt = f"♪ {description} ♪"
+        prompt = f"[audio] {description}"
         inputs = self._processor(prompt, return_tensors="pt")
         if self.device == "cuda":
             inputs = {k: v.to("cuda") for k, v in inputs.items()}
 
-        with torch.no_grad():
-            audio_array = self._model.generate(**inputs)
+        with torch.inference_mode():
+            audio_array = self._model.generate(
+                **inputs,
+                do_sample=True,
+                fine_temperature=0.3, # Slightly lower for foley stability
+                semantic_temperature=0.8,
+                coarse_temperature=0.8,
+                min_eos_p=0.1
+            )
 
-        audio_array = audio_array.cpu().numpy().squeeze()
+        audio_array = audio_array.cpu().numpy().squeeze().astype(np.float32)
+
+        # Audio Post-processing to fix 'beep' and 'quality'
+        audio_array = np.nan_to_num(audio_array)
+        if np.abs(audio_array).max() > 0:
+            audio_array = audio_array / np.abs(audio_array).max() * 0.95
 
         buffer = io.BytesIO()
         sf.write(buffer, audio_array, self.SAMPLE_RATE, format="WAV")

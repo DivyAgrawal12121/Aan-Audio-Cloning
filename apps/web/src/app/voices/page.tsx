@@ -31,13 +31,11 @@ export default function VoicesPage() {
     };
 
     const handleDelete = async (voice: SavedVoice) => {
-        if (!confirm(`Delete voice "${voice.name}"? This cannot be undone.`)) return;
+        if (!confirm(`DELETE VOICE "${voice.name.toUpperCase()}"?`)) return;
         try {
             await deleteVoice(voice.id);
             setVoices((prev) => prev.filter((v) => v.id !== voice.id));
-        } catch (err) {
-            console.error("Failed to delete:", err);
-        }
+        } catch (err) { }
     };
 
     const handlePreview = async (voice: SavedVoice) => {
@@ -47,7 +45,6 @@ export default function VoicesPage() {
             if (previewUrl) URL.revokeObjectURL(previewUrl);
             setPreviewUrl(URL.createObjectURL(blob));
         } catch (err) {
-            console.error("Preview failed:", err);
         } finally {
             setPreviewingId(null);
         }
@@ -58,246 +55,91 @@ export default function VoicesPage() {
             v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             v.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             v.language.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            v.tags?.some((t) =>
-                t.toLowerCase().includes(searchQuery.toLowerCase())
-            )
+            v.tags?.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()))
     );
 
     return (
         <div className="page-container-md">
             {/* Header */}
-            <div style={{ marginBottom: "36px" }}>
-                <div
-                    style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "14px",
-                        marginBottom: "12px",
-                    }}
-                >
-                    <div
-                        style={{
-                            width: 48,
-                            height: 48,
-                            borderRadius: "14px",
-                            background: "linear-gradient(135deg, #f59e0b, #ef4444)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            boxShadow: "0 8px 24px rgba(245, 158, 11, 0.25)",
-                        }}
-                    >
-                        <Library size={22} color="white" />
-                    </div>
-                    <div>
-                        <h1
-                            style={{
-                                fontSize: "1.8rem",
-                                fontWeight: 800,
-                                letterSpacing: "-0.02em",
-                            }}
-                        >
-                            My Voices
-                        </h1>
-                        <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)" }}>
-                            {voices.length} voice{voices.length !== 1 ? "s" : ""} saved
-                            locally
-                        </p>
-                    </div>
+            <div className="page-hero" style={{ marginBottom: "32px" }}>
+                <div style={{ width: 56, height: 56, background: "var(--accent-amber)", border: "var(--border-thick)", boxShadow: "4px 4px 0px #000", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Library size={26} color="black" strokeWidth={3} />
+                </div>
+                <div>
+                    <h1 style={{ fontSize: "1.75rem", fontWeight: 900 }}>My Voices</h1>
+                    <p style={{ fontWeight: 600 }}>{voices.length} speakers in your local vault.</p>
                 </div>
             </div>
 
             {/* Search & Refresh */}
-            <div
-                style={{
-                    display: "flex",
-                    gap: "12px",
-                    marginBottom: "24px",
-                }}
-            >
+            <div style={{ display: "flex", gap: "12px", marginBottom: "24px" }}>
                 <div style={{ flex: 1, position: "relative" }}>
                     <Search
-                        size={16}
-                        style={{
-                            position: "absolute",
-                            left: "14px",
-                            top: "50%",
-                            transform: "translateY(-50%)",
-                            color: "var(--text-muted)",
-                            pointerEvents: "none",
-                        }}
+                        size={18}
+                        style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "#000", pointerEvents: "none" }}
+                        strokeWidth={3}
                     />
                     <input
                         type="text"
                         className="input-field"
-                        placeholder="Search voices by name, description, language, or tag..."
+                        placeholder="SEARCH YOUR LIBRARY..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        style={{ paddingLeft: "40px" }}
+                        style={{ paddingLeft: "48px", fontWeight: 800 }}
                     />
                 </div>
                 <button
                     onClick={loadVoices}
                     style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: "var(--radius-md)",
-                        background: "rgba(139, 92, 246, 0.08)",
-                        border: "1px solid var(--border-subtle)",
-                        color: "var(--text-secondary)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        cursor: "pointer",
-                        transition: "all 0.2s ease",
-                        flexShrink: 0,
-                    }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.background = "rgba(139, 92, 246, 0.15)";
-                        e.currentTarget.style.color = "var(--text-primary)";
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "rgba(139, 92, 246, 0.08)";
-                        e.currentTarget.style.color = "var(--text-secondary)";
+                        width: 52, height: 52, background: "var(--accent-purple)", border: "var(--border-thin)",
+                        boxShadow: "3px 3px 0px #000", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
                     }}
                 >
-                    <RefreshCw size={16} />
+                    <RefreshCw size={20} strokeWidth={3} color="black" className={isLoading ? "spin" : ""} />
                 </button>
             </div>
 
             {/* Preview Player */}
             {previewUrl && (
-                <div style={{ marginBottom: "20px" }}>
-                    <AudioPlayer
-                        audioUrl={previewUrl}
-                        label="Voice Preview"
-                        showDownload={false}
-                    />
+                <div style={{ marginBottom: "24px" }}>
+                    <AudioPlayer audioUrl={previewUrl} label="ACTIVE PREVIEW" showDownload={false} />
                 </div>
             )}
 
             {/* Voice List */}
             {isLoading ? (
-                <div
-                    style={{
-                        textAlign: "center",
-                        padding: "60px 0",
-                        color: "var(--text-muted)",
-                    }}
-                >
-                    <Loader2
-                        size={32}
-                        className="pulse-glow"
-                        style={{
-                            margin: "0 auto 12px",
-                            color: "var(--accent-purple)",
-                        }}
-                    />
-                    <p>Loading voices...</p>
+                <div className="glass-card" style={{ padding: "60px", textAlign: "center", background: "#fff" }}>
+                    <Loader2 size={40} className="spin" style={{ margin: "0 auto 16px", color: "var(--accent-purple)" }} strokeWidth={3} />
+                    <p style={{ fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.1em" }}>Accessing Vault...</p>
                 </div>
             ) : filtered.length === 0 ? (
-                <div
-                    className="glass-card"
-                    style={{
-                        padding: "60px 40px",
-                        textAlign: "center",
-                    }}
-                >
-                    <div
-                        style={{
-                            width: 64,
-                            height: 64,
-                            borderRadius: "20px",
-                            background: "rgba(139, 92, 246, 0.08)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            margin: "0 auto 16px",
-                        }}
-                    >
-                        <Library size={28} color="var(--text-muted)" />
-                    </div>
-                    <h3
-                        style={{
-                            fontSize: "1.1rem",
-                            fontWeight: 600,
-                            color: "var(--text-primary)",
-                            marginBottom: "8px",
-                        }}
-                    >
-                        {searchQuery ? "No matching voices" : "No voices yet"}
+                <div className="glass-card" style={{ padding: "60px 40px", textAlign: "center", background: "var(--bg-secondary)" }}>
+                    <Library size={48} color="rgba(0,0,0,0.2)" style={{ margin: "0 auto 20px" }} strokeWidth={1} />
+                    <h3 style={{ fontSize: "1.25rem", fontWeight: 900, textTransform: "uppercase", marginBottom: "12px" }}>
+                        {searchQuery ? "TRACK LOST" : "VAULT EMPTY"}
                     </h3>
-                    <p
-                        style={{
-                            fontSize: "0.88rem",
-                            color: "var(--text-muted)",
-                            lineHeight: 1.5,
-                            maxWidth: "400px",
-                            margin: "0 auto",
-                        }}
-                    >
-                        {searchQuery
-                            ? "Try adjusting your search terms."
-                            : "Start by cloning a voice from an audio sample or designing a new one from a text description."}
+                    <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-muted)", maxWidth: "400px", margin: "0 auto 24px" }}>
+                        {searchQuery ? "NO VOICES MATCH YOUR QUERY." : "YOU HAVEN'T CLONED OR DESIGNED ANY VOICES YET."}
                     </p>
                     {!searchQuery && (
-                        <div
-                            style={{
-                                display: "flex",
-                                gap: "12px",
-                                justifyContent: "center",
-                                marginTop: "20px",
-                            }}
-                        >
-                            <a href="/clone" className="glow-btn" style={{ textDecoration: "none" }}>
-                                Clone Voice
-                            </a>
-                            <a
-                                href="/design"
-                                className="glow-btn"
-                                style={{
-                                    textDecoration: "none",
-                                    background: "linear-gradient(135deg, #ec4899, #f43f5e)",
-                                }}
-                            >
-                                Design Voice
-                            </a>
+                        <div style={{ display: "flex", gap: "16px", justifyContent: "center" }}>
+                            <a href="/clone" className="sketchy-btn" style={{ background: "var(--accent-cyan)", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>CLONE NOW</a>
+                            <a href="/design" className="sketchy-btn" style={{ background: "var(--accent-pink)", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>DESIGN NEW</a>
                         </div>
                     )}
                 </div>
             ) : (
-                <div
-                    style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "12px",
-                    }}
-                >
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                     {filtered.map((voice) => (
                         <div key={voice.id} style={{ position: "relative" }}>
-                            <VoiceCard
-                                voice={voice}
-                                onDelete={handleDelete}
-                                onPreview={handlePreview}
-                            />
+                            <VoiceCard voice={voice} onDelete={handleDelete} onPreview={handlePreview} />
                             {previewingId === voice.id && (
-                                <div
-                                    style={{
-                                        position: "absolute",
-                                        inset: 0,
-                                        background: "rgba(6, 6, 14, 0.7)",
-                                        borderRadius: "var(--radius-lg)",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        gap: "8px",
-                                        color: "var(--accent-purple)",
-                                        fontSize: "0.88rem",
-                                        fontWeight: 500,
-                                    }}
-                                >
-                                    <Loader2 size={18} className="pulse-glow" />
-                                    Generating preview...
+                                <div style={{
+                                    position: "absolute", inset: 0, background: "rgba(255,255,255,0.7)", border: "var(--border-thin)",
+                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "12px", zIndex: 10
+                                }}>
+                                    <Loader2 size={24} className="spin" color="black" strokeWidth={3} />
+                                    <span style={{ fontWeight: 900, textTransform: "uppercase" }}>PREVIEWING...</span>
                                 </div>
                             )}
                         </div>

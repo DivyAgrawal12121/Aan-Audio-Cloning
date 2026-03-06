@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useRef, useState } from "react";
-import { Upload, FileAudio, X, CheckCircle } from "lucide-react";
+import { Upload, FileAudio, X, CheckCircle, Info } from "lucide-react";
 
 interface AudioUploaderProps {
     onFileSelect: (file: File) => void;
@@ -31,12 +31,12 @@ export default function AudioUploader({
                 .map((e) => e.trim().toLowerCase());
             const ext = "." + file.name.split(".").pop()?.toLowerCase();
             if (!allowedExts.includes(ext)) {
-                setError(`Invalid format. Accepted: ${acceptedFormats}`);
+                setError(`INVALID FORMAT: ${acceptedFormats.toUpperCase()}`);
                 return false;
             }
 
             if (file.size > maxSizeMB * 1024 * 1024) {
-                setError(`File too large. Max ${maxSizeMB}MB allowed.`);
+                setError(`FILE TOO LARGE: MAX ${maxSizeMB}MB`);
                 return false;
             }
 
@@ -76,34 +76,36 @@ export default function AudioUploader({
     if (selectedFile) {
         return (
             <div
-                className="dropzone has-file"
                 style={{
                     display: "flex",
                     alignItems: "center",
                     gap: "16px",
                     padding: "20px 24px",
+                    background: "var(--accent-cyan)",
+                    border: "var(--border-thin)",
+                    boxShadow: "4px 4px 0px #000",
                 }}
             >
                 <div
                     style={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: "12px",
-                        background: "rgba(6, 182, 212, 0.12)",
+                        width: 44,
+                        height: 44,
+                        background: "#000",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         flexShrink: 0,
                     }}
                 >
-                    <CheckCircle size={24} color="#06b6d4" />
+                    <CheckCircle size={22} color="var(--accent-cyan)" strokeWidth={3} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <p
                         style={{
-                            fontWeight: 600,
-                            color: "var(--text-primary)",
+                            fontWeight: 900,
+                            color: "#000",
                             fontSize: "0.95rem",
+                            textTransform: "uppercase",
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
@@ -111,9 +113,8 @@ export default function AudioUploader({
                     >
                         {selectedFile.name}
                     </p>
-                    <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                        {formatSize(selectedFile.size)} •{" "}
-                        {selectedFile.type || "audio file"}
+                    <p style={{ fontSize: "0.7rem", fontWeight: 800, color: "rgba(0,0,0,0.6)", marginTop: "2px", textTransform: "uppercase" }}>
+                        {formatSize(selectedFile.size)} • READY
                     </p>
                 </div>
                 <button
@@ -123,23 +124,16 @@ export default function AudioUploader({
                         setError(null);
                     }}
                     style={{
-                        background: "rgba(239, 68, 68, 0.12)",
-                        border: "1px solid rgba(239, 68, 68, 0.2)",
-                        borderRadius: "8px",
+                        background: "#fff",
+                        border: "2px solid #000",
                         padding: "8px",
                         cursor: "pointer",
-                        color: "#ef4444",
-                        transition: "all 0.2s ease",
+                        color: "#000",
+                        boxShadow: "2px 2px 0px #000",
                         flexShrink: 0,
                     }}
-                    onMouseEnter={(e) =>
-                        (e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)")
-                    }
-                    onMouseLeave={(e) =>
-                        (e.currentTarget.style.background = "rgba(239, 68, 68, 0.12)")
-                    }
                 >
-                    <X size={16} />
+                    <X size={16} strokeWidth={3} />
                 </button>
             </div>
         );
@@ -148,73 +142,52 @@ export default function AudioUploader({
     return (
         <div>
             <div
-                className={`dropzone ${isDragging ? "dragging" : ""}`}
                 onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => {
-                    e.preventDefault();
-                    setIsDragging(true);
-                }}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={handleDrop}
+                style={{
+                    border: "3px dashed #000",
+                    background: isDragging ? "var(--bg-secondary)" : "#fff",
+                    padding: "40px 20px",
+                    textAlign: "center",
+                    cursor: "pointer",
+                    boxShadow: isDragging ? "inset 4px 4px 0px rgba(0,0,0,0.1)" : "none",
+                    transition: "all 0.1s ease",
+                }}
             >
                 <div
                     style={{
-                        width: 60,
-                        height: 60,
-                        borderRadius: "16px",
-                        background: isDragging
-                            ? "rgba(139, 92, 246, 0.15)"
-                            : "rgba(139, 92, 246, 0.08)",
+                        width: 64,
+                        height: 64,
+                        background: "var(--accent-purple)",
+                        border: "2px solid #000",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        margin: "0 auto 16px",
-                        transition: "all 0.3s ease",
+                        margin: "0 auto 20px",
+                        boxShadow: "4px 4px 0px #000",
                     }}
                 >
                     {isDragging ? (
-                        <FileAudio size={28} color="#8b5cf6" />
+                        <FileAudio size={30} color="black" strokeWidth={3} />
                     ) : (
-                        <Upload size={28} color="#8b5cf6" />
+                        <Upload size={30} color="black" strokeWidth={3} />
                     )}
                 </div>
-                <p
-                    style={{
-                        fontWeight: 600,
-                        color: "var(--text-primary)",
-                        fontSize: "1rem",
-                        marginBottom: "6px",
-                    }}
-                >
-                    {isDragging ? "Drop your audio file here" : "Upload Audio Sample"}
+                <p style={{ fontWeight: 900, fontSize: "1.15rem", textTransform: "uppercase", color: "#000", marginBottom: "8px" }}>
+                    {isDragging ? "DROP IT HERE!" : "UPLOAD AUDIO"}
                 </p>
-                <p
-                    style={{
-                        fontSize: "0.82rem",
-                        color: "var(--text-muted)",
-                        lineHeight: 1.5,
-                    }}
-                >
-                    Drag & drop or click to browse • 3–10 seconds recommended
-                    <br />
-                    WAV, MP3, FLAC, OGG, M4A supported • Max {maxSizeMB}MB
+                <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    DRAG & DROP OR CLICK • WAV, MP3, FLAC • MAX {maxSizeMB}MB
                 </p>
             </div>
 
             {error && (
-                <p
-                    style={{
-                        color: "#ef4444",
-                        fontSize: "0.82rem",
-                        marginTop: "8px",
-                        padding: "8px 12px",
-                        background: "rgba(239, 68, 68, 0.08)",
-                        borderRadius: "8px",
-                        border: "1px solid rgba(239, 68, 68, 0.15)",
-                    }}
-                >
-                    {error}
-                </p>
+                <div style={{ marginTop: "12px", background: "#fee2e2", border: "2px solid #ef4444", padding: "10px", display: "flex", gap: "8px", alignItems: "center" }}>
+                    <Info size={16} color="#ef4444" strokeWidth={3} />
+                    <p style={{ color: "#ef4444", fontSize: "0.75rem", fontWeight: 800 }}>{error}</p>
+                </div>
             )}
 
             <input

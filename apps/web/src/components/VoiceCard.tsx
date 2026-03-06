@@ -40,191 +40,138 @@ export default function VoiceCard({
             className="glass-card"
             onClick={() => onSelect?.(voice)}
             style={{
-                padding: compact ? "14px 18px" : "20px 24px",
+                padding: compact ? "12px 16px" : "20px 24px",
                 cursor: onSelect ? "pointer" : "default",
-                border: isSelected
-                    ? "1px solid var(--accent-purple)"
-                    : "1px solid var(--border-subtle)",
-                background: isSelected
-                    ? "rgba(139, 92, 246, 0.08)"
-                    : "var(--bg-glass)",
-                transition: "all 0.25s ease",
+                background: isSelected ? "var(--bg-secondary)" : "#fff",
+                border: "var(--border-thin)",
+                boxShadow: isSelected ? "2px 2px 0px #000" : "4px 4px 0px #000",
+                transform: isSelected ? "translate(2px, 2px)" : "none",
+                transition: "all 0.1s ease",
+                display: "flex",
+                alignItems: "center",
+                gap: "16px",
             }}
+            onMouseEnter={e => { if (!isSelected) { e.currentTarget.style.transform = "translate(-1px, -1px)"; e.currentTarget.style.boxShadow = "6px 6px 0px #000"; } }}
+            onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "4px 4px 0px #000"; } }}
         >
+            {/* Avatar */}
             <div
                 style={{
+                    width: compact ? 36 : 48,
+                    height: compact ? 36 : 48,
+                    background: isSelected ? "var(--accent-purple)" : "var(--accent-cyan)",
+                    border: "2px solid #000",
                     display: "flex",
                     alignItems: "center",
-                    gap: compact ? "12px" : "16px",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    boxShadow: "2px 2px 0px #000"
                 }}
             >
-                {/* Avatar */}
-                <div
+                <Mic
+                    size={compact ? 16 : 22}
+                    color="black"
+                    strokeWidth={3}
+                />
+            </div>
+
+            {/* Info */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+                <p
                     style={{
-                        width: compact ? 38 : 48,
-                        height: compact ? 38 : 48,
-                        borderRadius: compact ? "10px" : "14px",
-                        background: isSelected
-                            ? "linear-gradient(135deg, #8b5cf6, #6366f1)"
-                            : "rgba(139, 92, 246, 0.1)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                        transition: "all 0.3s ease",
+                        fontWeight: 900,
+                        color: "#000",
+                        fontSize: compact ? "0.85rem" : "1rem",
+                        textTransform: "uppercase",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
                     }}
                 >
-                    <Mic
-                        size={compact ? 16 : 20}
-                        color={isSelected ? "white" : "#8b5cf6"}
-                    />
-                </div>
-
-                {/* Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                    <p
+                    {voice.name}
+                </p>
+                <div
+                    style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        marginTop: "2px",
+                    }}
+                >
+                    <span
                         style={{
-                            fontWeight: 600,
-                            color: "var(--text-primary)",
-                            fontSize: compact ? "0.88rem" : "0.95rem",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                        }}
-                    >
-                        {voice.name}
-                    </p>
-                    {!compact && voice.description && (
-                        <p
-                            style={{
-                                fontSize: "0.8rem",
-                                color: "var(--text-muted)",
-                                marginTop: "2px",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                            }}
-                        >
-                            {voice.description}
-                        </p>
-                    )}
-                    <div
-                        style={{
-                            display: "flex",
+                            display: "inline-flex",
                             alignItems: "center",
-                            gap: "10px",
-                            marginTop: compact ? "2px" : "6px",
+                            gap: "4px",
+                            fontSize: "0.65rem",
+                            fontWeight: 800,
+                            color: "var(--text-muted)",
+                            textTransform: "uppercase"
                         }}
                     >
-                        <span
-                            style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                fontSize: "0.72rem",
-                                color: "var(--text-muted)",
-                            }}
-                        >
-                            <Globe size={11} />
-                            {voice.language}
-                        </span>
-                        <span
-                            style={{
-                                fontSize: "0.72rem",
-                                color: "var(--text-muted)",
-                            }}
-                        >
-                            {timeAgo(voice.createdAt)}
-                        </span>
-                    </div>
-                </div>
-
-                {/* Actions */}
-                <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
-                    {onPreview && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onPreview(voice);
-                            }}
-                            title="Preview"
-                            style={{
-                                width: 32,
-                                height: 32,
-                                borderRadius: "8px",
-                                background: "rgba(6, 182, 212, 0.08)",
-                                border: "1px solid rgba(6, 182, 212, 0.15)",
-                                color: "#06b6d4",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                cursor: "pointer",
-                                transition: "all 0.2s ease",
-                            }}
-                            onMouseEnter={(e) =>
-                                (e.currentTarget.style.background = "rgba(6, 182, 212, 0.15)")
-                            }
-                            onMouseLeave={(e) =>
-                                (e.currentTarget.style.background = "rgba(6, 182, 212, 0.08)")
-                            }
-                        >
-                            <Play size={13} />
-                        </button>
-                    )}
-                    {onDelete && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onDelete(voice);
-                            }}
-                            title="Delete"
-                            style={{
-                                width: 32,
-                                height: 32,
-                                borderRadius: "8px",
-                                background: "rgba(239, 68, 68, 0.06)",
-                                border: "1px solid rgba(239, 68, 68, 0.1)",
-                                color: "#ef4444",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                cursor: "pointer",
-                                transition: "all 0.2s ease",
-                            }}
-                            onMouseEnter={(e) =>
-                                (e.currentTarget.style.background = "rgba(239, 68, 68, 0.12)")
-                            }
-                            onMouseLeave={(e) =>
-                                (e.currentTarget.style.background = "rgba(239, 68, 68, 0.06)")
-                            }
-                        >
-                            <Trash2 size={13} />
-                        </button>
-                    )}
+                        <Globe size={11} strokeWidth={3} />
+                        {voice.language}
+                    </span>
+                    <span
+                        style={{
+                            fontSize: "0.65rem",
+                            fontWeight: 800,
+                            color: "var(--text-muted)",
+                            textTransform: "uppercase"
+                        }}
+                    >
+                        {timeAgo(voice.createdAt)}
+                    </span>
                 </div>
             </div>
 
-            {/* Tags */}
-            {!compact && voice.tags && voice.tags.length > 0 && (
-                <div
-                    style={{
-                        display: "flex",
-                        gap: "6px",
-                        flexWrap: "wrap",
-                        marginTop: "12px",
-                    }}
-                >
-                    {voice.tags.map((tag) => (
-                        <span
-                            key={tag}
-                            className="tag"
-                            style={{ fontSize: "0.7rem", padding: "4px 10px" }}
-                        >
-                            {tag}
-                        </span>
-                    ))}
-                </div>
-            )}
+            {/* Actions */}
+            <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+                {onPreview && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onPreview(voice);
+                        }}
+                        style={{
+                            width: 34,
+                            height: 34,
+                            background: "var(--accent-green)",
+                            border: "2px solid #000",
+                            color: "black",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            cursor: "pointer",
+                            boxShadow: "2px 2px 0px #000",
+                        }}
+                    >
+                        <Play size={14} strokeWidth={3} />
+                    </button>
+                )}
+                {onDelete && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete(voice);
+                        }}
+                        style={{
+                            width: 34,
+                            height: 34,
+                            background: "#ef4444",
+                            border: "2px solid #000",
+                            color: "white",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            cursor: "pointer",
+                            boxShadow: "2px 2px 0px #000",
+                        }}
+                    >
+                        <Trash2 size={14} strokeWidth={3} />
+                    </button>
+                )}
+            </div>
         </div>
     );
 }
