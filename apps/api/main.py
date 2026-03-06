@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import gc
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,11 +47,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger("voxforge")
 
+# ---- Lifespan ----
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("=" * 60)
+    logger.info("  VoxForge API Server Starting")
+    logger.info("  Multi-Model Architecture v2.0")
+    logger.info("=" * 60)
+    
+    # Enable automatic CuDNN optimizations for generation algorithms
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.backends.cudnn.benchmark = True
+            logger.info("Enabled CuDNN benchmarks for optimized performance.")
+    except ImportError:
+        pass
+        
+    yield
+    logger.info("VoxForge API Server Shutting Down")
+
 # ---- App ----
 app = FastAPI(
     title="VoxForge API",
     description="AI Voice Cloning & TTS powered by Qwen3-TTS 1.7B",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS for Next.js frontend
@@ -503,19 +525,4 @@ async def audio_inpaint(
         raise HTTPException(400, f"The currently loaded model ({manager.active_model_id}) does not support audio in-painting.")
 
 
-# ---- Startup ----
-@app.on_event("startup")
-async def startup():
-    logger.info("=" * 60)
-    logger.info("  VoxForge API Server Starting")
-    logger.info("  Multi-Model Architecture v2.0")
-    logger.info("=" * 60)
-    
-    # Enable automatic CuDNN optimizations for generation algorithms
-    try:
-        import torch
-        if torch.cuda.is_available():
-            torch.backends.cudnn.benchmark = True
-            logger.info("Enabled CuDNN benchmarks for optimized performance.")
-    except ImportError:
-        pass
+

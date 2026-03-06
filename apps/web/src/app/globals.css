@@ -589,20 +589,6 @@ body {
 }
 
 /* ── Keyframe Animations ── */
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.spin {
-  animation: spin 1s linear infinite;
-}
-
 @keyframes shimmer {
   0% {
     transform: translateX(-100%);
