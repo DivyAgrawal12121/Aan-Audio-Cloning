@@ -14,10 +14,11 @@ Run with:
 import json
 import logging
 import os
+import gc
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, FileResponse, StreamingResponse
+from fastapi.responses import Response, FileResponse, StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -30,6 +31,7 @@ from voice_store import (
     get_voice_sample_path,
     delete_voice as store_delete_voice,
 )
+from utils.audio_utils import master_audio, sanitize_reference_audio
 
 # ---- Logging ----
 log_file_path = os.path.join(os.path.dirname(__file__), "data", "voxforge.log")
@@ -54,11 +56,32 @@ app = FastAPI(
 # CORS for Next.js frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global Exception Handler (OOM Protection)
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_msg = str(exc)
+    if "out of memory" in error_msg.lower():
+        logger.error("CUDA Out of Memory caught. Cleaning up VRAM...")
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
+        except:
+            pass
+        return JSONResponse(
+            status_code=503, 
+            content={"detail": "GPU out of memory. The server has freed VRAM. Try generating a shorter audio clip or select a smaller model."}
+        )
+    
+    logger.error(f"Unhandled exception: {error_msg}", exc_info=exc)
+    return JSONResponse(status_code=500, content={"detail": f"Internal Server Error: {error_msg}"})
 
 
 # ---- Models ----
@@ -182,6 +205,9 @@ async def clone_voice(
     audio_bytes = await audio.read()
     if len(audio_bytes) == 0:
         raise HTTPException(400, "Empty audio file")
+        
+    # Remove background noise to improve clone quality
+    audio_bytes = sanitize_reference_audio(audio_bytes)
 
     # Clone voice using the active manager engine
     manager = get_manager()
@@ -261,6 +287,13 @@ async def generate_speech(req: GenerateRequest):
     if not embedding_path:
         raise HTTPException(404, f"Voice embedding not found: {req.voiceId}")
 
+    # Optional parameters for advanced models
+    kwargs = {}
+    if hasattr(req, "temperature") and req.temperature is not None:
+        kwargs["temperature"] = req.temperature
+    if hasattr(req, "repetition_penalty") and req.repetition_penalty is not None:
+        kwargs["repetition_penalty"] = req.repetition_penalty
+
     manager = get_manager()
     engine = manager.get_current_engine()
     audio_bytes = engine.generate_speech(
@@ -272,9 +305,13 @@ async def generate_speech(req: GenerateRequest):
         pitch=req.pitch,
         duration=req.duration,
         style=req.style,
+        **kwargs
     )
+    
+    # Process audio through the mastering chain
+    audio_bytes = master_audio(audio_bytes)
 
-    logger.info(f"Speech generated: {len(audio_bytes)} bytes")
+    logger.info(f"Speech generated and mastered: {len(audio_bytes)} bytes")
     return Response(
         content=audio_bytes,
         media_type="audio/wav",
@@ -358,6 +395,7 @@ async def generate_foley(req: FoleyRequest):
     engine = manager.get_current_engine()
     try:
         audio_bytes = engine.generate_foley(req.description)
+        audio_bytes = master_audio(audio_bytes) # Add mastering
         return Response(content=audio_bytes, media_type="audio/wav",
                         headers={"Content-Disposition": "attachment; filename=foley.wav"})
     except NotImplementedError:
@@ -397,6 +435,7 @@ async def cross_lingual_dub(req: DubbingRequest):
             source_lang=req.sourceLang,
             target_lang=req.targetLang,
         )
+        dubbed_audio = master_audio(dubbed_audio) # Add mastering
         return Response(content=dubbed_audio, media_type="audio/wav",
                         headers={"Content-Disposition": "attachment; filename=dubbed.wav"})
     except NotImplementedError:
@@ -428,6 +467,7 @@ async def generate_podcast(req: PodcastRequest):
             voice_a_path=voice_a_path,
             voice_b_path=voice_b_path,
         )
+        audio_bytes = master_audio(audio_bytes) # Add mastering
         return Response(content=audio_bytes, media_type="audio/wav",
                         headers={"Content-Disposition": "attachment; filename=podcast.wav"})
     except NotImplementedError:
@@ -470,5 +510,12 @@ async def startup():
     logger.info("  VoxForge API Server Starting")
     logger.info("  Multi-Model Architecture v2.0")
     logger.info("=" * 60)
-    # Optionally pre-load the model (uncomment to load eagerly)
-    # get_engine()._ensure_loaded()
+    
+    # Enable automatic CuDNN optimizations for generation algorithms
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.backends.cudnn.benchmark = True
+            logger.info("Enabled CuDNN benchmarks for optimized performance.")
+    except ImportError:
+        pass

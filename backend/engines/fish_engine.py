@@ -10,6 +10,7 @@ import numpy as np
 import soundfile as sf
 
 from engines.base_engine import BaseEngine
+from utils.audio_utils import normalize_text
 
 logger = logging.getLogger("voxforge.engines.fish")
 
@@ -79,6 +80,8 @@ class FishSpeechEngine(BaseEngine):
         self.load()
         if self._model is None:
             raise RuntimeError("Fish Speech failed to load.")
+            
+        text = normalize_text(text)
 
         prompt_data = torch.load(embedding_path, map_location="cpu", weights_only=False)
         ref_audio = prompt_data.get("ref_audio_path", "")
@@ -123,6 +126,8 @@ class FishSpeechEngine(BaseEngine):
             else:
                 ref_path = voice_a_path
                 text = line
+                
+            text = normalize_text(text)
 
             prompt_data = torch.load(ref_path, map_location="cpu", weights_only=False)
             ref_audio = prompt_data.get("ref_audio_path", "")

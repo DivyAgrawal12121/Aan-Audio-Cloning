@@ -36,9 +36,9 @@ class QwenDesignEngine(BaseEngine):
         logger.info(f"Loading Qwen3-TTS VoiceDesign: {self.model_id}")
         try:
             from qwen_tts import Qwen3TTSModel
-            dtype = torch.bfloat16 if self.device == "cuda" else torch.float32
             device_map = "cuda:0" if self.device == "cuda" else "cpu"
-            self._model = Qwen3TTSModel.from_pretrained(self.model_id, device_map=device_map, dtype=dtype)
+            self._model = Qwen3TTSModel.from_pretrained(self.model_id, dtype=dtype)
+            self._model.to(self.device)
             self._loaded = True
             logger.info("Qwen3-TTS VoiceDesign loaded successfully!")
         except Exception as e:
@@ -62,6 +62,10 @@ class QwenDesignEngine(BaseEngine):
             raise RuntimeError("Qwen VoiceDesign failed to load.")
 
         language = kwargs.get("language", "English")
+        supported = ['auto', 'chinese', 'english', 'french', 'german', 'italian', 'japanese', 'korean', 'portuguese', 'russian', 'spanish']
+        if language.lower() not in supported:
+            language = "English"
+
         logger.info(f"Designing voice: {description[:50]}...")
 
         wavs, sr = self._model.generate(
@@ -85,11 +89,18 @@ class QwenDesignEngine(BaseEngine):
             raise RuntimeError("Qwen VoiceDesign failed to load.")
 
         language = kwargs.get("language", "English")
-        fallback_path = os.path.abspath(os.path.join("data", "fallback.wav"))
+        supported = ['auto', 'chinese', 'english', 'french', 'german', 'italian', 'japanese', 'korean', 'portuguese', 'russian', 'spanish']
+        if language.lower() not in supported:
+            language = "English"
+
+        fallback_path = os.path.join("data", "fallback.wav")
+        if not os.path.exists(fallback_path):
+            sf.write(fallback_path, np.zeros(24000), 24000)
+            
         wavs, sr = self._model.generate_voice_clone(
             text=text,
             language=language,
-            ref_audio=fallback_path if os.path.exists(fallback_path) else None,
+            ref_audio=fallback_path,
             ref_text="Hello, this is a test.",
             x_vector_only_mode=True,
         )

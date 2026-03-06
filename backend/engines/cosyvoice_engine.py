@@ -10,6 +10,7 @@ import numpy as np
 import soundfile as sf
 
 from engines.base_engine import BaseEngine
+from utils.audio_utils import normalize_text
 
 logger = logging.getLogger("voxforge.engines.cosyvoice")
 
@@ -86,6 +87,8 @@ class CosyVoiceEngine(BaseEngine):
         prompt_data = torch.load(embedding_path, map_location="cpu", weights_only=False)
         ref_audio = prompt_data.get("ref_audio_path", "")
         ref_text = prompt_data.get("ref_text", "")
+        
+        text = normalize_text(text)
 
         instruct = text
         if emotion and emotion != "neutral":
@@ -107,6 +110,8 @@ class CosyVoiceEngine(BaseEngine):
         self.load()
         if self._model is None:
             raise RuntimeError("CosyVoice failed to load.")
+            
+        text = normalize_text(text)
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp_path = tmp.name

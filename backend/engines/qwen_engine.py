@@ -10,6 +10,7 @@ import numpy as np
 import soundfile as sf
 
 from engines.base_engine import BaseEngine
+from utils.audio_utils import normalize_text
 
 logger = logging.getLogger("voxforge.engines.qwen")
 
@@ -50,6 +51,15 @@ class QwenEngine(BaseEngine):
                 device_map=device_map,
                 dtype=dtype,
             )
+            
+            if os.environ.get("TTS_COMPILE", "0") == "1":
+                logger.info("Compiling Qwen3-TTS model graph for optimized inference...")
+                # Qwen might be complex to compile, wrap in try-except if needed, but standard compile usually works.
+                try: 
+                    self._model.model = torch.compile(self._model.model, mode="reduce-overhead")
+                except Exception as compile_error:
+                    logger.warning(f"torch.compile failed for Qwen, continuing without it: {compile_error}")
+            
             self._loaded = True
             self._load_failed = False
             logger.info("Qwen3-TTS model loaded successfully!")
@@ -104,8 +114,15 @@ class QwenEngine(BaseEngine):
         self.load()
         if self._load_failed or not self._model:
             raise RuntimeError("Qwen3-TTS failed to load.")
+            
+        text = normalize_text(text)
 
         language = kwargs.get("language", "English")
+        supported = ['auto', 'chinese', 'english', 'french', 'german', 'italian', 'japanese', 'korean', 'portuguese', 'russian', 'spanish']
+        if language.lower() not in supported:
+            logger.warning(f"Qwen3-TTS does not support '{language}'. Falling back to English.")
+            language = "English"
+
         emotion = kwargs.get("emotion", "neutral")
         speed = kwargs.get("speed", 1.0)
         pitch = kwargs.get("pitch", 1.0)
@@ -125,11 +142,16 @@ class QwenEngine(BaseEngine):
                 voice_clone_prompt=prompt_items,
             )
         else:
-            fallback_path = os.path.abspath(os.path.join("data", "fallback.wav"))
+            # Pass relative path to avoid urllib thinking C:\ or E:\ is a URL schema
+            fallback_path = os.path.join("data", "fallback.wav")
+            if not os.path.exists(fallback_path):
+                # Create a simple silent fallback if missing
+                sf.write(fallback_path, np.zeros(24000), 24000)
+                
             wavs, sr = self._model.generate_voice_clone(
                 text=text,
                 language=language,
-                ref_audio=fallback_path if os.path.exists(fallback_path) else None,
+                ref_audio=fallback_path,
                 ref_text="Hello, this is a test.",
                 x_vector_only_mode=True,
             )
@@ -150,13 +172,22 @@ class QwenEngine(BaseEngine):
 
         language = kwargs.get("language", "English")
         logger.info(f"Designing voice: {description[:50]}...")
+        
+        text = normalize_text(text)
 
-        fallback_path = os.path.abspath(os.path.join("data", "fallback.wav"))
+        supported = ['auto', 'chinese', 'english', 'french', 'german', 'italian', 'japanese', 'korean', 'portuguese', 'russian', 'spanish']
+        if language.lower() not in supported:
+            language = "English"
+
+        fallback_path = os.path.join("data", "fallback.wav")
+        if not os.path.exists(fallback_path):
+            sf.write(fallback_path, np.zeros(24000), 24000)
+            
         wavs, sr = self._model.generate_voice_clone(
             text=text,
             language=language,
-            ref_audio=fallback_path if os.path.exists(fallback_path) else None,
-            ref_text="Okay. Yeah. I resent you. I love you. I respect you. But you know what? You blew it! And thanks to you.",
+            ref_audio=fallback_path,
+            ref_text="This is a fallback reference audio for design purposes.",
             x_vector_only_mode=True,
         )
 

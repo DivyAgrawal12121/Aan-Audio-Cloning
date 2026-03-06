@@ -10,6 +10,7 @@ import numpy as np
 import soundfile as sf
 
 from engines.base_engine import BaseEngine
+from utils.audio_utils import normalize_text
 
 logger = logging.getLogger("voxforge.engines.f5")
 
@@ -39,6 +40,11 @@ class F5Engine(BaseEngine):
             from f5_tts.api import F5TTS
 
             self._model = F5TTS(model_type="F5-TTS", device=self.device)
+            
+            if os.environ.get("TTS_COMPILE", "0") == "1":
+                logger.info("Compiling F5-TTS model graph for optimized inference...")
+                self._model.model = torch.compile(self._model.model, mode="reduce-overhead")
+                
             self._loaded = True
             logger.info("F5-TTS loaded successfully!")
         except Exception as e:
@@ -89,15 +95,21 @@ class F5Engine(BaseEngine):
         ref_audio = prompt_data.get("ref_audio_path", "")
         ref_text = prompt_data.get("ref_text", "")
 
+        text = normalize_text(text)
+
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as out_tmp:
             out_path = out_tmp.name
 
         try:
+            # F5 supports speed control. Pass optional parameters if available.
+            speed = kwargs.get("speed", 1.0)
+            
             self._model.infer(
                 ref_file=ref_audio,
                 ref_text=ref_text,
                 gen_text=text,
                 file_wave=out_path,
+                speed=speed,
             )
 
             with open(out_path, "rb") as f:
@@ -132,6 +144,8 @@ class F5Engine(BaseEngine):
                 ref_path = voice_a_path
                 text = line
 
+            text = normalize_text(text)
+
             prompt_data = torch.load(ref_path, map_location="cpu", weights_only=False)
             ref_audio = prompt_data.get("ref_audio_path", "")
             ref_text = prompt_data.get("ref_text", "")
@@ -139,7 +153,8 @@ class F5Engine(BaseEngine):
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as out_tmp:
                 out_path = out_tmp.name
 
-            self._model.infer(ref_file=ref_audio, ref_text=ref_text, gen_text=text, file_wave=out_path)
+            # Keep podcast generation at regular speed by default.
+            self._model.infer(ref_file=ref_audio, ref_text=ref_text, gen_text=text, file_wave=out_path, speed=1.0)
 
             audio_data, sr = sf.read(out_path)
             all_audio.append(audio_data)

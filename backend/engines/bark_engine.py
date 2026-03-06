@@ -8,6 +8,7 @@ import numpy as np
 import soundfile as sf
 
 from engines.base_engine import BaseEngine
+from utils.audio_utils import normalize_text
 
 logger = logging.getLogger("voxforge.engines.bark")
 
@@ -44,6 +45,13 @@ class BarkEngine(BaseEngine):
             if self.device == "cuda":
                 self._model = self._model.to("cuda")
 
+            if os.environ.get("TTS_COMPILE", "0") == "1":
+                logger.info("Compiling Bark model graph for optimized inference...")
+                try:
+                    self._model = torch.compile(self._model, mode="reduce-overhead")
+                except Exception as compile_error:
+                    logger.warning(f"torch.compile failed for Bark: {compile_error}")
+
             self._loaded = True
             logger.info("Bark model loaded successfully!")
         except Exception as e:
@@ -68,6 +76,8 @@ class BarkEngine(BaseEngine):
         self.load()
         if self._model is None:
             raise RuntimeError("Bark failed to load.")
+            
+        text = normalize_text(text)
 
         voice_preset = kwargs.get("voice_preset", "v2/en_speaker_6")
         inputs = self._processor(text, voice_preset=voice_preset, return_tensors="pt")
@@ -91,6 +101,7 @@ class BarkEngine(BaseEngine):
             raise RuntimeError("Bark failed to load.")
 
         # Bark uses special tokens for non-speech: [laughter], [music], etc.
+        description = normalize_text(description)
         prompt = f"♪ {description} ♪"
         inputs = self._processor(prompt, return_tensors="pt")
         if self.device == "cuda":

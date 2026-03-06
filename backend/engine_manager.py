@@ -176,7 +176,9 @@ class EngineManager:
 
     def __init__(self):
         self.active_model_id: Optional[str] = None
-        self.active_engine: Optional[BaseEngine] = None
+        # LRU Cache: Dict maintains insertion order. Last item is most recently used.
+        self.loaded_engines: Dict[str, BaseEngine] = {}
+        self.max_loaded_models = int(os.environ.get("MAX_LOADED_MODELS", "2"))
         # Shared progress state for SSE streaming
         self._progress: Optional[LoadProgress] = None
         self._loading_lock = threading.Lock()
@@ -199,13 +201,24 @@ class EngineManager:
         if model_id not in self.AVAILABLE_MODELS:
             raise ValueError(f"Unknown model ID: {model_id}")
 
-        if self.active_model_id == model_id and self.active_engine and self.active_engine.is_loaded:
+        if self.active_model_id == model_id and model_id in self.loaded_engines and self.loaded_engines[model_id].is_loaded:
             logger.info(f"Model {model_id} is already loaded.")
-            return self.active_engine
+            return self.loaded_engines[model_id]
 
-        if self.active_engine is not None and self.active_engine.is_loaded:
-            logger.info(f"Switching models. Unloading {self.active_model_id} first...")
-            self.active_engine.unload()
+        if model_id in self.loaded_engines and self.loaded_engines[model_id].is_loaded:
+            logger.info(f"Model {model_id} is in cache. Switching to it.")
+            # Move to end to mark as most recently used
+            engine = self.loaded_engines.pop(model_id)
+            self.loaded_engines[model_id] = engine
+            self.active_model_id = model_id
+            return engine
+
+        if len(self.loaded_engines) >= self.max_loaded_models:
+            # Unload the oldest model (first item in dict)
+            oldest_id = next(iter(self.loaded_engines))
+            logger.info(f"VRAM cache full. Unloading {oldest_id} to make room for {model_id}...")
+            oldest_engine = self.loaded_engines.pop(oldest_id)
+            oldest_engine.unload()
 
         logger.info(f"Initializing engine for {model_id}...")
         model_info = self.AVAILABLE_MODELS[model_id]
@@ -216,8 +229,8 @@ class EngineManager:
         new_engine.load()
 
         self.active_model_id = model_id
-        self.active_engine = new_engine
-        return self.active_engine
+        self.loaded_engines[model_id] = new_engine
+        return new_engine
 
     # ─────────────────────────────────────
     #  Streaming load with progress
@@ -242,17 +255,32 @@ class EngineManager:
         except:
             total_mb = 2048.0  # Fallback 2GB estimate
 
-        # Already loaded?
-        if self.active_model_id == model_id and self.active_engine and self.active_engine.is_loaded:
+        # Already loaded as active?
+        if self.active_model_id == model_id and model_id in self.loaded_engines and self.loaded_engines[model_id].is_loaded:
             yield LoadProgress(phase="ready", percent=100, message=f"{model_name} already loaded",
                                model_id=model_id, model_name=model_name, total_mb=total_mb, downloaded_mb=total_mb)
             return
 
-        # ── Phase 1: Unload current ──
-        if self.active_engine is not None and self.active_engine.is_loaded:
-            yield LoadProgress(phase="unloading", percent=5, message=f"Unloading {self.active_model_id}...",
+        # Already in cache but not active?
+        if model_id in self.loaded_engines and self.loaded_engines[model_id].is_loaded:
+            yield LoadProgress(phase="loading_gpu", percent=90, message=f"{model_name} found in VRAM cache ✓",
+                               model_id=model_id, model_name=model_name, total_mb=total_mb, downloaded_mb=total_mb)
+            engine = self.loaded_engines.pop(model_id)
+            self.loaded_engines[model_id] = engine
+            self.active_model_id = model_id
+            yield LoadProgress(phase="ready", percent=100, message=f"{model_name} is active!",
+                               model_id=model_id, model_name=model_name, total_mb=total_mb, downloaded_mb=total_mb)
+            return
+
+        # ── Phase 1: Unload oldest if cache is full ──
+        if len(self.loaded_engines) >= self.max_loaded_models:
+            oldest_id = next(iter(self.loaded_engines))
+            yield LoadProgress(phase="unloading", percent=5, message=f"VRAM caching full. Unloading {oldest_id}...",
                                model_id=model_id, model_name=model_name, total_mb=total_mb)
-            self.active_engine.unload()
+            
+            oldest_engine = self.loaded_engines.pop(oldest_id)
+            oldest_engine.unload()
+            
             gc.collect()
             try:
                 import torch
@@ -260,7 +288,7 @@ class EngineManager:
                     torch.cuda.empty_cache()
             except ImportError:
                 pass
-            yield LoadProgress(phase="unloading", percent=10, message="Previous model unloaded, VRAM freed",
+            yield LoadProgress(phase="unloading", percent=10, message="Old model unloaded, VRAM freed",
                                model_id=model_id, model_name=model_name, total_mb=total_mb)
 
         # ── Phase 2: Import engine class ──
@@ -343,7 +371,7 @@ class EngineManager:
                                total_mb=total_mb, downloaded_mb=total_mb)
 
             self.active_model_id = model_id
-            self.active_engine = new_engine
+            self.loaded_engines[model_id] = new_engine
 
             yield LoadProgress(phase="ready", percent=100, message=f"{model_name} is ready!",
                                model_id=model_id, model_name=model_name,
@@ -358,10 +386,10 @@ class EngineManager:
         """
         Returns the active engine. If none is loaded, defaults to Qwen.
         """
-        if self.active_engine is None or not self.active_engine.is_loaded:
+        if self.active_model_id is None or self.active_model_id not in self.loaded_engines or not self.loaded_engines[self.active_model_id].is_loaded:
             logger.warning("No engine actively loaded. Defaulting to qwen-1.7b")
             return self.load_model("qwen-1.7b")
-        return self.active_engine
+        return self.loaded_engines[self.active_model_id]
 
 
 # Global singleton instance

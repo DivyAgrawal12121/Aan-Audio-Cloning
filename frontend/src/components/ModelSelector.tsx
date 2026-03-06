@@ -209,7 +209,13 @@ export default function ModelSelector() {
 
     const fetchModels = useCallback(async () => {
         try {
-            const res = await fetch("http://localhost:8000/api/models");
+            const res = await fetch("http://localhost:8000/api/models", {
+                cache: 'no-store',
+                headers: {
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
+                }
+            });
             if (res.ok) {
                 const data: ModelsResponse = await res.json();
                 setModels(data.models);

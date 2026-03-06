@@ -8,6 +8,7 @@ import numpy as np
 import soundfile as sf
 
 from engines.base_engine import BaseEngine
+from utils.audio_utils import normalize_text
 
 logger = logging.getLogger("voxforge.engines.parler")
 
@@ -45,6 +46,11 @@ class ParlerEngine(BaseEngine):
                 self._model = self._model.to("cuda")
 
             self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+            
+            if os.environ.get("TTS_COMPILE", "0") == "1":
+                logger.info("Compiling Parler-TTS model graph for optimized inference...")
+                self._model = torch.compile(self._model, mode="reduce-overhead")
+                
             self._loaded = True
             logger.info("Parler-TTS loaded successfully!")
         except Exception as e:
@@ -72,6 +78,9 @@ class ParlerEngine(BaseEngine):
 
         logger.info(f"Designing voice: {description[:60]}...")
 
+        text = normalize_text(text)
+        description = normalize_text(description)
+
         input_ids = self._tokenizer(description, return_tensors="pt").input_ids
         prompt_input_ids = self._tokenizer(text, return_tensors="pt").input_ids
 
@@ -79,10 +88,19 @@ class ParlerEngine(BaseEngine):
             input_ids = input_ids.to("cuda")
             prompt_input_ids = prompt_input_ids.to("cuda")
 
+        # Expose generation parameters for stability/expressiveness tuning
+        temperature = kwargs.get("temperature", 0.7)
+        repetition_penalty = kwargs.get("repetition_penalty", 1.0)
+        max_new_tokens = kwargs.get("max_new_tokens", int(self.SAMPLE_RATE * 30 / 100)) # Default max 30s
+
         with torch.no_grad():
             generation = self._model.generate(
                 input_ids=input_ids,
                 prompt_input_ids=prompt_input_ids,
+                temperature=temperature,
+                repetition_penalty=repetition_penalty,
+                max_new_tokens=max_new_tokens,
+                do_sample=True if temperature > 0 else False
             )
 
         audio_array = generation.cpu().numpy().squeeze()

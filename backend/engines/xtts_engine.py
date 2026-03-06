@@ -10,6 +10,7 @@ import numpy as np
 import soundfile as sf
 
 from engines.base_engine import BaseEngine
+from utils.audio_utils import normalize_text
 
 logger = logging.getLogger("voxforge.engines.xtts")
 
@@ -81,6 +82,8 @@ class XTTSEngine(BaseEngine):
         self.load()
         if self._model is None:
             raise RuntimeError("XTTS v2 failed to load.")
+            
+        text = normalize_text(text)
 
         language = kwargs.get("language", "en")
         # Map common language names to XTTS codes
@@ -116,6 +119,8 @@ class XTTSEngine(BaseEngine):
         self.load()
         if self._model is None:
             raise RuntimeError("XTTS v2 failed to load.")
+            
+        text = normalize_text(text)
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp_path = tmp.name
