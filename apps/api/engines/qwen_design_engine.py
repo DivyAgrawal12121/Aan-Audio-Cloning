@@ -36,7 +36,8 @@ class QwenDesignEngine(BaseEngine):
         logger.info(f"Loading Qwen3-TTS VoiceDesign: {self.model_id}")
         try:
             from qwen_tts import Qwen3TTSModel
-            device_map = "cuda:0" if self.device == "cuda" else "cpu"
+            dtype = torch.bfloat16 if self.device == "cuda" else torch.float32
+            
             self._model = Qwen3TTSModel.from_pretrained(self.model_id, dtype=dtype)
             self._model.to(self.device)
             self._loaded = True
