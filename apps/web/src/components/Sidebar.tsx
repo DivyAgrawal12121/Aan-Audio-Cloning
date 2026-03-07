@@ -53,6 +53,7 @@ export default function Sidebar() {
                     padding: "0 24px",
                     marginBottom: "32px",
                     textDecoration: "none",
+                    flexShrink: 0,
                 }}
             >
                 <div
@@ -99,11 +100,9 @@ export default function Sidebar() {
             </Link>
 
             {/* AI Model Selector */}
-            <div style={{ padding: "0 16px" }}>
+            <div style={{ padding: "0 16px", marginBottom: "32px", flexShrink: 0 }}>
                 <ModelSelector />
             </div>
-
-            <div style={{ height: "24px" }} />
 
             {/* Navigation */}
             <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: "8px", padding: "0 16px" }}>
