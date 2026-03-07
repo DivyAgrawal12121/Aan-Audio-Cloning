@@ -94,6 +94,7 @@ export async function generatePodcast(data: {
     script: string;
     voiceIdA: string;
     voiceIdB: string;
+    language?: string;
 }): Promise<Blob> {
     const response = await api.post("/api/podcast", data, {
         responseType: "blob",
