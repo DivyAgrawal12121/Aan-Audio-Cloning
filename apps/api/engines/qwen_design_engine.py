@@ -44,7 +44,7 @@ class QwenDesignEngine(BaseEngine):
             logger.info("Qwen3-TTS VoiceDesign loaded successfully!")
         except Exception as e:
             logger.error(f"Failed to load Qwen VoiceDesign: {e}", exc_info=True)
-            self._loaded = True
+            self._loaded = False
             self._load_failed = True
 
     def unload(self):

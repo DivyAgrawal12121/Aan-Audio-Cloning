@@ -56,7 +56,7 @@ class ParlerEngine(BaseEngine):
             logger.info("Parler-TTS loaded successfully!")
         except Exception as e:
             logger.error(f"Failed to load Parler-TTS: {e}", exc_info=True)
-            self._loaded = True
+            self._loaded = False
             self._model = None
 
     def unload(self):

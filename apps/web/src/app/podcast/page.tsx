@@ -11,11 +11,14 @@ B: Thanks for having me! It's incredible how far voice cloning has come in just 
 A: Absolutely. Just two years ago, you needed hours of training data. Now it's three seconds.
 B: The implications for content creation are mind-boggling. Podcasters, narrators, game developers...`;
 
+const LANGUAGES = ["English", "Chinese", "French", "German", "Hindi", "Italian", "Japanese", "Korean", "Portuguese", "Russian", "Spanish"];
+
 export default function PodcastPage() {
     const [voices, setVoices] = useState<SavedVoice[]>([]);
     const [voiceA, setVoiceA] = useState("");
     const [voiceB, setVoiceB] = useState("");
     const [script, setScript] = useState(EXAMPLE_SCRIPT);
+    const [language, setLanguage] = useState("English");
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const { progress, isActive, start, complete } = useSimulatedProgress();
@@ -28,7 +31,7 @@ export default function PodcastPage() {
         setError(null);
         setAudioUrl(null);
         try {
-            const blob = await generatePodcast({ script, voiceIdA: voiceA, voiceIdB: voiceB });
+            const blob = await generatePodcast({ script, voiceIdA: voiceA, voiceIdB: voiceB, language });
             setAudioUrl(URL.createObjectURL(blob));
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : "Generation failed");
@@ -50,20 +53,20 @@ export default function PodcastPage() {
                 </div>
             </div>
 
-            {/* Engine Banner */}
+            {/* Info Banner */}
             <div className="section-card" style={{ marginBottom: "20px", background: "var(--bg-secondary)", display: "flex", gap: "12px", alignItems: "start" }}>
                 <div style={{ width: 40, height: 40, background: "#000", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <Info size={20} color="var(--accent-amber)" strokeWidth={3} />
                 </div>
                 <div>
-                    <p style={{ fontSize: "0.85rem", fontWeight: 800, textTransform: "uppercase", marginBottom: "4px" }}>Compatible Models</p>
+                    <p style={{ fontSize: "0.85rem", fontWeight: 800, textTransform: "uppercase", marginBottom: "4px" }}>How It Works</p>
                     <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)" }}>
-                        Requires <strong>F5-TTS</strong> or <strong>Fish Speech</strong>. These engines support high-fidelity speech synthesis.
+                        Works with <strong>all models</strong>. Select two cloned voices, write a script with <strong>A:</strong> and <strong>B:</strong> prefixes, and generate a full podcast episode.
                     </p>
                 </div>
             </div>
 
-            {/* Speaker Selection */}
+            {/* Speaker Selection + Language */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
                 <div className="section-card" style={{ marginBottom: 0 }}>
                     <p className="section-label" style={{ color: "var(--accent-pink)", display: "flex", alignItems: "center", gap: "8px" }}>
@@ -83,6 +86,14 @@ export default function PodcastPage() {
                         {voices.map((v) => <option key={v.id} value={v.id}>{v.name.toUpperCase()}</option>)}
                     </select>
                 </div>
+            </div>
+
+            {/* Language Selector */}
+            <div className="section-card" style={{ marginBottom: "20px" }}>
+                <p className="section-label" style={{ marginBottom: "8px" }}>LANGUAGE</p>
+                <select value={language} onChange={e => setLanguage(e.target.value)} className="select-field">
+                    {LANGUAGES.map(l => <option key={l} value={l}>{l.toUpperCase()}</option>)}
+                </select>
             </div>
 
             {/* Script Input */}
@@ -132,7 +143,7 @@ export default function PodcastPage() {
             {/* Error */}
             {error && (
                 <div style={{ padding: "16px", marginBottom: "20px", background: "#fee2e2", border: "var(--border-thin)", boxShadow: "4px 4px 0px #000" }}>
-                    <p style={{ fontSize: "0.85rem", fontWeight: 900, color: "#ef4444" }}>⚠️ EXPORT FAILED: {error.toUpperCase()}</p>
+                    <p style={{ fontSize: "0.85rem", fontWeight: 900, color: "#ef4444" }}>⚠️ GENERATION FAILED: {error}</p>
                 </div>
             )}
 
@@ -145,3 +156,4 @@ export default function PodcastPage() {
         </div>
     );
 }
+

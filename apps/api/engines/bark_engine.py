@@ -57,7 +57,7 @@ class BarkEngine(BaseEngine):
             logger.info("Bark model loaded successfully!")
         except Exception as e:
             logger.error(f"Failed to load Bark: {e}", exc_info=True)
-            self._loaded = True
+            self._loaded = False
             self._model = None
 
     def unload(self):
@@ -80,7 +80,27 @@ class BarkEngine(BaseEngine):
             
         text = normalize_text(text)
 
-        voice_preset = kwargs.get("voice_preset", "v2/en_speaker_6")
+        # Map language to Bark's speaker presets
+        language = kwargs.get("language", "English")
+        lang_prefix_map = {
+            "English": "v2/en", "Chinese": "v2/zh", "French": "v2/fr",
+            "German": "v2/de", "Hindi": "v2/hi", "Italian": "v2/it",
+            "Japanese": "v2/ja", "Korean": "v2/ko", "Portuguese": "v2/pt",
+            "Russian": "v2/ru", "Spanish": "v2/es", "Turkish": "v2/tr",
+        }
+        lang_prefix = lang_prefix_map.get(language, "v2/en")
+
+        # Map emotion to different Bark speaker IDs for variety
+        emotion = kwargs.get("emotion", "neutral")
+        emotion_speaker_map = {
+            "neutral": 6, "happy": 1, "sad": 4, "angry": 8,
+            "excited": 3, "calm": 0, "serious": 9, "whisper": 2,
+        }
+        speaker_num = emotion_speaker_map.get(emotion, 6)
+
+        voice_preset = kwargs.get("voice_preset", f"{lang_prefix}_speaker_{speaker_num}")
+        logger.info(f"Bark using voice preset: {voice_preset}")
+
         inputs = self._processor(text, voice_preset=voice_preset, return_tensors="pt")
         if self.device == "cuda":
             inputs = {k: v.to("cuda") for k, v in inputs.items()}

@@ -69,9 +69,9 @@ class F5Engine(BaseEngine):
                 except Exception as e2:
                     logger.error(f"F5-TTS fallback to CPU also failed: {e2}")
                     self._model = None
-                    self._loaded = True
+                    self._loaded = False
             else:
-                self._loaded = True
+                self._loaded = False
                 self._model = None
 
     def unload(self):
@@ -89,24 +89,15 @@ class F5Engine(BaseEngine):
         if self._model is None:
             raise RuntimeError("F5-TTS failed to load.")
 
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp_path = tmp.name
-            audio_data, sr = sf.read(io.BytesIO(audio_bytes))
-            if len(audio_data.shape) > 1:
-                audio_data = audio_data.mean(axis=1)
-            sf.write(tmp_path, audio_data, sr)
-
-        try:
-            # F5-TTS uses ref audio path directly for cloning
-            prompt_bytes = io.BytesIO()
-            torch.save({"ref_audio_path": tmp_path, "ref_text": ref_text, "engine": "f5"}, prompt_bytes)
-            return {
-                "prompt_bytes": prompt_bytes.getvalue(),
-                "sample_rate": self.SAMPLE_RATE,
-            }
-        except Exception as e:
-            logger.error(f"F5-TTS clone failed: {e}", exc_info=True)
-            raise
+        # Store reference text and engine marker in the embedding.
+        # The actual audio is saved as sample.wav by voice_store.save_voice(),
+        # so we DON'T store a temp file path (it would get deleted by the OS).
+        prompt_bytes = io.BytesIO()
+        torch.save({"ref_text": ref_text, "engine": "f5"}, prompt_bytes)
+        return {
+            "prompt_bytes": prompt_bytes.getvalue(),
+            "sample_rate": self.SAMPLE_RATE,
+        }
 
     def generate_speech(self, text: str, embedding_path: str, **kwargs) -> bytes:
         self.load()

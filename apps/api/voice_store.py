@@ -34,6 +34,7 @@ def save_voice(
     tags: list[str],
     embedding_data: bytes,
     audio_sample: Optional[bytes] = None,
+    engine_id: str = "unknown",
 ) -> dict:
     """Save a voice embedding and metadata to disk. Returns the voice record."""
     voice_id = str(uuid.uuid4())
@@ -59,6 +60,7 @@ def save_voice(
         "createdAt": datetime.utcnow().isoformat() + "Z",
         "embeddingPath": _embedding_path(voice_id),
         "audioSampleUrl": f"/api/voices/{voice_id}/sample" if audio_sample else None,
+        "clonedWithEngine": engine_id,
     }
     with open(_meta_path(voice_id), "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)

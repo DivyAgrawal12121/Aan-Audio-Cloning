@@ -33,7 +33,8 @@ class QwenEngine(BaseEngine):
             "design": True,
             "foley": False,
             "emotion": True,
-            "speed": True
+            "speed": True,
+            "cross_lingual": True,
         }
 
     def load(self):
@@ -42,6 +43,9 @@ class QwenEngine(BaseEngine):
 
         logger.info(f"Loading Qwen3-TTS model: {self.model_id}")
         try:
+            # Suppress noisy SoX warning on Windows where SoX isn't installed
+            logging.getLogger("sox").setLevel(logging.CRITICAL)
+
             from qwen_tts import Qwen3TTSModel
             dtype = torch.bfloat16 if self.device == "cuda" else torch.float32
             device_map = f"cuda:0" if self.device == "cuda" else "cpu"
@@ -65,7 +69,7 @@ class QwenEngine(BaseEngine):
             logger.info("Qwen3-TTS model loaded successfully!")
         except Exception as e:
             logger.error(f"Failed to load Qwen3-TTS model: {e}", exc_info=True)
-            self._loaded = True
+            self._loaded = False
             self._load_failed = True
 
     def unload(self):
@@ -128,6 +132,30 @@ class QwenEngine(BaseEngine):
         pitch = kwargs.get("pitch", 1.0)
         style = kwargs.get("style", None)
 
+        # Qwen3-TTS uses natural language instructions for emotion/style control
+        # Prepend emotion/style instructions to the text
+        instruction_parts = []
+        if style:
+            instruction_parts.append(style)
+        if emotion and emotion != "neutral":
+            emotion_prompts = {
+                "happy": "Speak with a cheerful, upbeat tone.",
+                "sad": "Speak with a melancholic, sorrowful tone.",
+                "angry": "Speak with an intense, forceful tone.",
+                "excited": "Speak with high energy and enthusiasm.",
+                "calm": "Speak in a calm, relaxed manner.",
+                "serious": "Speak in a serious, authoritative tone.",
+                "whisper": "Speak in a soft whisper.",
+                "surprised": "Speak with surprise and wonder.",
+            }
+            prompt = emotion_prompts.get(emotion, f"Speak with a {emotion} tone.")
+            instruction_parts.append(prompt)
+
+        if instruction_parts:
+            instruction = " ".join(instruction_parts)
+            text = f"[{instruction}] {text}"
+            logger.info(f"Qwen text with emotion/style: {text[:80]}...")
+
         prompt_items = torch.load(
             embedding_path,
             map_location=self.device,
@@ -156,10 +184,26 @@ class QwenEngine(BaseEngine):
                 x_vector_only_mode=True,
             )
 
+        # Extract the actual audio array from the list returned by generate_voice_clone
+        audio_array = wavs[0] if isinstance(wavs, (list, tuple)) else wavs
+        logger.info(f"Raw audio type={type(audio_array)}, shape={getattr(audio_array, 'shape', 'N/A')}")
+
         if isinstance(audio_array, torch.Tensor):
             audio_array = audio_array.to(torch.float32).cpu().numpy()
         else:
-            audio_array = audio_array.astype(np.float32)
+            audio_array = np.array(audio_array, dtype=np.float32)
+
+        # Squeeze to 1D if shape is (1, N) or similar
+        if audio_array.ndim > 1:
+            audio_array = audio_array.squeeze()
+
+        # Apply speed control via resampling (time-stretch approximation)
+        if speed and speed != 1.0 and 0.5 <= speed <= 2.0:
+            original_len = len(audio_array)
+            target_len = int(original_len / speed)
+            indices = np.linspace(0, original_len - 1, target_len)
+            audio_array = np.interp(indices, np.arange(original_len), audio_array).astype(np.float32)
+            logger.info(f"Applied speed={speed}x: {original_len} -> {len(audio_array)} samples")
 
         buffer = io.BytesIO()
         sf.write(buffer, audio_array, sr, format="WAV")
@@ -192,10 +236,18 @@ class QwenEngine(BaseEngine):
             x_vector_only_mode=True,
         )
 
+        # Extract the actual audio array from the list returned by generate_voice_clone
+        audio_array = wavs[0] if isinstance(wavs, (list, tuple)) else wavs
+        logger.info(f"Raw design audio type={type(audio_array)}, shape={getattr(audio_array, 'shape', 'N/A')}")
+
         if isinstance(audio_array, torch.Tensor):
             audio_array = audio_array.to(torch.float32).cpu().numpy()
         else:
-            audio_array = audio_array.astype(np.float32)
+            audio_array = np.array(audio_array, dtype=np.float32)
+
+        # Squeeze to 1D if shape is (1, N) or similar
+        if audio_array.ndim > 1:
+            audio_array = audio_array.squeeze()
 
         buffer = io.BytesIO()
         sf.write(buffer, audio_array, sr, format="WAV")

@@ -46,7 +46,7 @@ class XTTSEngine(BaseEngine):
             logger.info("XTTS v2 loaded successfully!")
         except Exception as e:
             logger.error(f"Failed to load XTTS v2: {e}", exc_info=True)
-            self._loaded = True
+            self._loaded = False
             self._model = None
 
     def unload(self):
@@ -64,15 +64,11 @@ class XTTSEngine(BaseEngine):
         if self._model is None:
             raise RuntimeError("XTTS v2 failed to load.")
 
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp_path = tmp.name
-            audio_data, sr = sf.read(io.BytesIO(audio_bytes))
-            if len(audio_data.shape) > 1:
-                audio_data = audio_data.mean(axis=1)
-            sf.write(tmp_path, audio_data, sr)
-
+        # Store reference text and engine marker in the embedding.
+        # The actual audio is saved as sample.wav by voice_store.save_voice(),
+        # so we DON'T store a temp file path (it would get deleted by the OS).
         prompt_bytes = io.BytesIO()
-        torch.save({"ref_audio_path": tmp_path, "ref_text": ref_text, "engine": "xtts"}, prompt_bytes)
+        torch.save({"ref_text": ref_text, "engine": "xtts"}, prompt_bytes)
         return {
             "prompt_bytes": prompt_bytes.getvalue(),
             "sample_rate": self.SAMPLE_RATE,
@@ -95,8 +91,19 @@ class XTTSEngine(BaseEngine):
         }
         lang_code = lang_map.get(language, language.lower()[:2])
 
-        prompt_data = torch.load(embedding_path, map_location="cpu", weights_only=False)
-        ref_audio = prompt_data.get("ref_audio_path", "")
+        prompt_data = None
+        try:
+            prompt_data = torch.load(embedding_path, map_location="cpu", weights_only=False)
+        except Exception:
+            pass
+
+        # Prefer the permanent 'sample.wav' stored alongside 'embedding.pt'
+        ref_audio = embedding_path.replace("embedding.pt", "sample.wav")
+        if not os.path.exists(ref_audio) and isinstance(prompt_data, dict):
+            ref_audio = prompt_data.get("ref_audio_path", "")
+
+        if not ref_audio or not os.path.exists(ref_audio):
+            raise RuntimeError(f"Reference audio not found for XTTS voice. Expected: {ref_audio}")
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as out_tmp:
             out_path = out_tmp.name

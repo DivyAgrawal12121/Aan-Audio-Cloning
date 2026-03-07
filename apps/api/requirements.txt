@@ -1,28 +1,43 @@
-# Resound Studio Backend - Python Dependencies
+# ========================================
+# Resound Studio Backend - Dependencies
 # ========================================
 
+# Core Local Server
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.6
 python-multipart>=0.0.9
 pydantic>=2.9.2
 
-# AI / TTS Model
-qwen-tts>=0.1.0
+# PyTorch Ecosystem
 torch>=2.1.0
+torchaudio>=2.1.0
+torchvision>=0.16.0
+
+# Base AI & Audio Libraries
 transformers>=4.44.0
-parler-tts>=0.2.0
-f5-tts>=0.1.0
+huggingface-hub>=0.23.0
 soundfile>=0.12.1
 numpy>=1.24.0
 scipy>=1.11.0
-huggingface-hub>=0.23.0
+pydub>=0.25.1
+librosa>=0.10.0
+
+# TTS Engines
+qwen-tts>=0.1.0
+parler-tts>=0.2.0
+f5-tts>=0.1.0
+TTS>=0.22.0  # Required for XTTS v2, Bark, and other coqui models
 
 # Utilities
 python-dotenv==1.0.1
 aiofiles==23.2.1
 uuid6==2024.7.10
 
-# Audio mastering & Text normalization
+# Audio Mastering, Mixing, & Text processing
 pedalboard>=0.9.8
 num2words>=0.5.13
 noisereduce>=2.0.0
+
+# Performance (Optional but highly recommended for GPUs)
+# Note: flash-attn requires C++ build tools on Windows. 
+# flash-attn>=2.5.0  

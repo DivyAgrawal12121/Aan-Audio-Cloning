@@ -44,7 +44,7 @@ class CosyVoiceEngine(BaseEngine):
             logger.info("CosyVoice loaded successfully!")
         except Exception as e:
             logger.error(f"Failed to load CosyVoice: {e}", exc_info=True)
-            self._loaded = True
+            self._loaded = False
             self._model = None
 
     def unload(self):
@@ -62,15 +62,11 @@ class CosyVoiceEngine(BaseEngine):
         if self._model is None:
             raise RuntimeError("CosyVoice failed to load.")
 
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp_path = tmp.name
-            audio_data, sr = sf.read(io.BytesIO(audio_bytes))
-            if len(audio_data.shape) > 1:
-                audio_data = audio_data.mean(axis=1)
-            sf.write(tmp_path, audio_data, sr)
-
+        # Store reference text and engine marker in the embedding.
+        # The actual audio is saved as sample.wav by voice_store.save_voice(),
+        # so we DON'T store a temp file path (it would get deleted by the OS).
         prompt_bytes = io.BytesIO()
-        torch.save({"ref_audio_path": tmp_path, "ref_text": ref_text, "engine": "cosyvoice"}, prompt_bytes)
+        torch.save({"ref_text": ref_text, "engine": "cosyvoice"}, prompt_bytes)
         return {
             "prompt_bytes": prompt_bytes.getvalue(),
             "sample_rate": self.SAMPLE_RATE,
@@ -97,6 +93,9 @@ class CosyVoiceEngine(BaseEngine):
         ref_audio = embedding_path.replace("embedding.pt", "sample.wav")
         if not os.path.exists(ref_audio) and isinstance(prompt_data, dict):
             ref_audio = prompt_data.get("ref_audio_path", "")
+
+        if not ref_audio or not os.path.exists(ref_audio):
+            raise RuntimeError(f"Reference audio not found for CosyVoice voice. Expected: {ref_audio}")
         
         text = normalize_text(text)
 
