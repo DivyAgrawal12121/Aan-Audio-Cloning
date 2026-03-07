@@ -2,20 +2,19 @@
 
 import React, { useState, useEffect } from "react";
 import { Terminal, RefreshCw, ShieldAlert } from "lucide-react";
+import { getLogs } from "@resound-studio/api";
 
 export default function LogsPage() {
     const [logs, setLogs] = useState<string>("INITIALIZING CONSOLE...");
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
     const fetchLogs = async () => {
         setIsRefreshing(true);
         try {
-            const res = await fetch(`${backendUrl}/api/logs`);
-            const data = await res.json();
-            setLogs(data.logs || "NO LOGS IN VAULT.");
-        } catch (err) {
-            setLogs(`CONNECTION ERROR: CHECK BACKEND AT ${backendUrl.toUpperCase()}`);
+            const data = await getLogs();
+            setLogs(data);
+        } catch {
+            setLogs("CONNECTION ERROR: CHECK BACKEND.");
         } finally {
             setIsRefreshing(false);
         }

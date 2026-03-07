@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@resound-studio/api": "workspace:*",
+    "@resound-studio/shared": "workspace:*",
+    "@resound-studio/ui": "workspace:*",
     "axios": "^1.13.6",
     "framer-motion": "^12.35.0",
     "lucide-react": "^0.577.0",

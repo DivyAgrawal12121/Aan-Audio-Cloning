@@ -2,9 +2,9 @@
 
 import React, { useState } from "react";
 import { Sparkles, Loader2, Wand2, CheckCircle2, AlertCircle, Info } from "lucide-react";
-import AudioPlayer from "@/components/AudioPlayer";
-import { SUPPORTED_LANGUAGES } from "@/lib/types";
-import { designVoice, previewVoice } from "@/lib/api";
+import { AudioPlayer, useSimulatedProgress } from "@resound-studio/ui";
+import { SUPPORTED_LANGUAGES } from "@resound-studio/shared";
+import { designVoice, previewVoice } from "@resound-studio/api";
 
 const VOICE_PRESETS = [
     {
@@ -29,18 +29,16 @@ export default function DesignPage() {
     const [description, setDescription] = useState("");
     const [voiceName, setVoiceName] = useState("");
     const [language, setLanguage] = useState("English");
-    const [isDesigning, setIsDesigning] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
     const [statusMessage, setStatusMessage] = useState("");
-    const [designProgress, setDesignProgress] = useState(0);
+    const { progress: designProgress, isActive: isDesigning, start: startProgress, complete: completeProgress } = useSimulatedProgress();
 
     const handleDesign = async () => {
         if (!description.trim() || !voiceName.trim()) return;
 
-        setIsDesigning(true);
+        startProgress();
         setStatus("idle");
-        setDesignProgress(0);
 
         try {
             const voice = await designVoice(description.trim(), voiceName.trim(), language);
@@ -56,20 +54,9 @@ export default function DesignPage() {
             setStatus("error");
             setStatusMessage("DESIGN FAILED. CHECK BACKEND.");
         } finally {
-            setDesignProgress(100);
-            setTimeout(() => {
-                setIsDesigning(false);
-                setDesignProgress(0);
-            }, 500);
+            completeProgress();
         }
     };
-
-    React.useEffect(() => {
-        if (isDesigning && designProgress < 95) {
-            const timer = setInterval(() => setDesignProgress(prev => Math.min(prev + Math.random() * 5, 95)), 800);
-            return () => clearInterval(timer);
-        }
-    }, [isDesigning, designProgress]);
 
     return (
         <div className="page-container-sm">

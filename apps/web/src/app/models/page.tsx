@@ -5,57 +5,22 @@ import {
     Cpu, HardDrive, Zap, Check, X, Loader2,
     AlertCircle, Download, Trash2, Box
 } from "lucide-react";
-import { createPortal } from "react-dom";
-
-/* ─── Types (Duplicated from ModelSelector for standalone use) ─── */
-interface ModelInfo {
-    name: string;
-    description: string;
-    vram_estimate: string;
-    download_size: string;
-    capabilities: string[];
-    features: string[];
-    is_downloaded?: boolean;
-}
-
-interface ModelsResponse {
-    active: string;
-    models: Record<string, ModelInfo>;
-}
-
-interface ProgressEvent {
-    phase: string;
-    percent: number;
-    message: string;
-    model_id: string;
-    model_name: string;
-}
-
-const CAP_STYLE: Record<string, { label: string; color: string; bg: string }> = {
-    clone: { label: "Clone", color: "#000", bg: "var(--accent-purple)" },
-    generate: { label: "TTS", color: "#000", bg: "var(--accent-cyan)" },
-    design: { label: "Design", color: "#000", bg: "var(--accent-pink)" },
-    foley: { label: "Foley", color: "#000", bg: "var(--accent-amber)" },
-    emotion: { label: "Emotion", color: "#000", bg: "var(--accent-pink)" },
-    cross_lingual: { label: "Multilingual", color: "#000", bg: "var(--accent-purple)" },
-    speed: { label: "Fast", color: "#000", bg: "var(--accent-green)" },
-};
+import type { ModelInfo, ModelProgressEvent } from "@resound-studio/shared";
+import { CAP_STYLE } from "@resound-studio/shared";
+import { getModels, getModelLoadStreamUrl, unloadModel } from "@resound-studio/api";
 
 export default function ModelManagerPage() {
     const [models, setModels] = useState<Record<string, ModelInfo>>({});
     const [activeModelId, setActiveModelId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isUnloading, setIsUnloading] = useState<string | null>(null);
-    const [loadProgress, setLoadProgress] = useState<ProgressEvent | null>(null);
+    const [loadProgress, setLoadProgress] = useState<ModelProgressEvent | null>(null);
 
     const fetchModels = useCallback(async () => {
         try {
-            const res = await fetch("http://localhost:8000/api/models", { cache: 'no-store' });
-            if (res.ok) {
-                const data: ModelsResponse = await res.json();
-                setModels(data.models);
-                setActiveModelId(data.active);
-            }
+            const data = await getModels();
+            setModels(data.models);
+            setActiveModelId(data.active);
         } catch (e) {
             console.error("Failed to fetch models", e);
         }
@@ -71,12 +36,10 @@ export default function ModelManagerPage() {
         setLoadProgress(null);
 
         try {
-            const eventSource = new EventSource(
-                `http://localhost:8000/api/models/load-stream?model_id=${encodeURIComponent(modelId)}`
-            );
+            const eventSource = new EventSource(getModelLoadStreamUrl(modelId));
 
             eventSource.onmessage = (event) => {
-                const data: ProgressEvent = JSON.parse(event.data);
+                const data: ModelProgressEvent = JSON.parse(event.data);
                 setLoadProgress(data);
                 if (data.phase === "ready") {
                     setActiveModelId(data.model_id);
@@ -110,15 +73,9 @@ export default function ModelManagerPage() {
         if (isLoading || isUnloading) return;
         setIsUnloading(modelId);
         try {
-            const res = await fetch("http://localhost:8000/api/models/unload", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ model_id: modelId }),
-            });
-            if (res.ok) {
-                if (activeModelId === modelId) setActiveModelId(null);
-                fetchModels();
-            }
+            await unloadModel(modelId);
+            if (activeModelId === modelId) setActiveModelId(null);
+            fetchModels();
         } catch (e) {
             console.error("Failed to unload model", e);
         } finally {

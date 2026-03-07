@@ -2,10 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import { Library, Search, Loader2, RefreshCw } from "lucide-react";
-import VoiceCard from "@/components/VoiceCard";
-import AudioPlayer from "@/components/AudioPlayer";
-import type { SavedVoice } from "@/lib/types";
-import { getVoices, deleteVoice, previewVoice } from "@/lib/api";
+import { VoiceCard, AudioPlayer } from "@resound-studio/ui";
+import type { SavedVoice } from "@resound-studio/shared";
+import { getVoices, deleteVoice, previewVoice } from "@resound-studio/api";
 
 export default function VoicesPage() {
     const [voices, setVoices] = useState<SavedVoice[]>([]);

@@ -2,10 +2,9 @@
 
 import React, { useState } from "react";
 import { Mic, Loader2, CheckCircle2, AlertCircle, Info } from "lucide-react";
-import AudioUploader from "@/components/AudioUploader";
-import AudioPlayer from "@/components/AudioPlayer";
-import { SUPPORTED_LANGUAGES } from "@/lib/types";
-import { cloneVoice } from "@/lib/api";
+import { AudioUploader, AudioPlayer, useSimulatedProgress } from "@resound-studio/ui";
+import { SUPPORTED_LANGUAGES } from "@resound-studio/shared";
+import { cloneVoice } from "@resound-studio/api";
 
 export default function ClonePage() {
     const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -13,11 +12,10 @@ export default function ClonePage() {
     const [description, setDescription] = useState("");
     const [language, setLanguage] = useState("English");
     const [tags, setTags] = useState("");
-    const [isCloning, setIsCloning] = useState(false);
     const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
     const [statusMessage, setStatusMessage] = useState("");
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-    const [cloneProgress, setCloneProgress] = useState(0);
+    const { progress: cloneProgress, isActive: isCloning, start: startProgress, complete: completeProgress } = useSimulatedProgress();
 
     // Create preview URL when file is selected
     const handleFileSelect = (file: File) => {
@@ -36,9 +34,8 @@ export default function ClonePage() {
     const handleClone = async () => {
         if (!audioFile || !voiceName.trim()) return;
 
-        setIsCloning(true);
+        startProgress();
         setStatus("idle");
-        setCloneProgress(0);
 
         try {
             const formData = new FormData();
@@ -70,22 +67,9 @@ export default function ClonePage() {
             const errorMsg = err instanceof Error ? err.message : "Failed to clone voice.";
             setStatusMessage(errorMsg);
         } finally {
-            setCloneProgress(100);
-            setTimeout(() => {
-                setIsCloning(false);
-                setCloneProgress(0);
-            }, 500);
+            completeProgress();
         }
     };
-
-    React.useEffect(() => {
-        if (isCloning && cloneProgress < 95) {
-            const timer = setInterval(() => {
-                setCloneProgress(prev => Math.min(prev + Math.random() * 5, 95));
-            }, 800);
-            return () => clearInterval(timer);
-        }
-    }, [isCloning, cloneProgress]);
 
     return (
         <div className="page-container-sm">

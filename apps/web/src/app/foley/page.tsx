@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Music, Loader2, Wand2, Info } from "lucide-react";
-import AudioPlayer from "@/components/AudioPlayer";
+import { AudioPlayer, useSimulatedProgress } from "@resound-studio/ui";
+import { generateFoley } from "@resound-studio/api";
 
 const PRESETS = [
     "Forest ambiance birds chirping",
@@ -19,48 +20,23 @@ const PRESETS = [
 
 export default function FoleyPage() {
     const [description, setDescription] = useState("");
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [progress, setProgress] = useState(0);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        let interval: NodeJS.Timeout;
-        if (isGenerating) {
-            setProgress(0);
-            interval = setInterval(() => setProgress(p => {
-                if (p < 30) return p + Math.random() * 4;
-                if (p < 70) return p + Math.random() * 2;
-                if (p < 92) return p + Math.random() * 0.8;
-                return p;
-            }), 400);
-        } else if (progress > 0 && !isGenerating) {
-            setProgress(100);
-            const t = setTimeout(() => setProgress(0), 1000);
-            return () => clearTimeout(t);
-        }
-        return () => clearInterval(interval);
-    }, [isGenerating]);
+    const { progress, isActive, start, complete } = useSimulatedProgress(400, 4);
 
     const handleGenerate = async () => {
         if (!description.trim()) return;
-        setIsGenerating(true);
+        start();
         setError(null);
         setAudioUrl(null);
         try {
-            const res = await fetch("http://localhost:8000/api/foley", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ description }),
-            });
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.detail || "Generation failed");
-            }
-            const blob = await res.blob();
+            const blob = await generateFoley(description);
             setAudioUrl(URL.createObjectURL(blob));
-        } catch (e: any) { setError(e.message); }
-        finally { setIsGenerating(false); }
+        } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : "Generation failed");
+        } finally {
+            complete();
+        }
     };
 
     return (
@@ -123,15 +99,15 @@ export default function FoleyPage() {
             <div style={{ position: "relative", marginBottom: "20px" }}>
                 <button
                     onClick={handleGenerate}
-                    disabled={isGenerating || !description.trim()}
+                    disabled={isActive || !description.trim()}
                     className="gen-btn"
                     style={{
                         width: "100%",
                         padding: "18px",
-                        background: isGenerating ? "#fff" : "var(--accent-pink)",
+                        background: isActive ? "#fff" : "var(--accent-pink)",
                     }}
                 >
-                    {isGenerating ? (
+                    {isActive ? (
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                             <Loader2 size={20} className="spin" strokeWidth={3} />
                             <span>GENERATING... {Math.round(progress)}%</span>
@@ -144,7 +120,7 @@ export default function FoleyPage() {
                     )}
                 </button>
 
-                {isGenerating && (
+                {isActive && (
                     <div style={{
                         position: "absolute", bottom: "-4px", left: "0", right: "4px", height: "8px",
                         background: "#000", border: "2px solid #000", overflow: "hidden"

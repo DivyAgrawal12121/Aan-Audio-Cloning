@@ -74,3 +74,30 @@ export type SupportedLanguage =
     | "Portuguese"
     | "Spanish"
     | "Italian";
+
+export interface ModelInfo {
+    name: string;
+    description: string;
+    vram_estimate: string;
+    download_size: string;
+    capabilities: string[];
+    features: string[];
+    is_downloaded?: boolean;
+}
+
+export interface ModelsResponse {
+    active: string;
+    models: Record<string, ModelInfo>;
+}
+
+export interface ModelProgressEvent {
+    phase: string;
+    percent: number;
+    message: string;
+    downloaded_mb: number;
+    total_mb: number;
+    speed_mbps: number;
+    eta_seconds: number;
+    model_id: string;
+    model_name: string;
+}

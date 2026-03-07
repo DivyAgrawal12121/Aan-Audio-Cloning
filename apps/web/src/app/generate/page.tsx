@@ -11,15 +11,14 @@ import {
     ChevronDown,
     Wand2,
 } from "lucide-react";
-import AudioPlayer from "@/components/AudioPlayer";
-import VoiceCard from "@/components/VoiceCard";
+import { AudioPlayer, VoiceCard, useSimulatedProgress } from "@resound-studio/ui";
 import {
     SUPPORTED_LANGUAGES,
     EMOTIONS,
     PARALINGUISTICS,
-} from "@/lib/types";
-import type { SavedVoice, Emotion } from "@/lib/types";
-import { generateSpeech, getVoices } from "@/lib/api";
+} from "@resound-studio/shared";
+import type { SavedVoice, Emotion } from "@resound-studio/shared";
+import { generateSpeech, getVoices } from "@resound-studio/api";
 
 export default function GeneratePage() {
     const [text, setText] = useState("");
@@ -31,11 +30,10 @@ export default function GeneratePage() {
     const [duration, setDuration] = useState<number | null>(null);
     const [useDuration, setUseDuration] = useState(false);
     const [style, setStyle] = useState("");
-    const [isGenerating, setIsGenerating] = useState(false);
     const [outputUrl, setOutputUrl] = useState<string | null>(null);
     const [voices, setVoices] = useState<SavedVoice[]>([]);
     const [showVoicePicker, setShowVoicePicker] = useState(false);
-    const [generationProgress, setGenerationProgress] = useState(0);
+    const { progress: generationProgress, isActive: isGenerating, start: startProgress, complete: completeProgress } = useSimulatedProgress();
 
     useEffect(() => {
         loadVoices();
@@ -63,8 +61,7 @@ export default function GeneratePage() {
 
     const handleGenerate = async () => {
         if (!text.trim() || !selectedVoice) return;
-        setIsGenerating(true);
-        setGenerationProgress(0);
+        startProgress();
         try {
             const blob = await generateSpeech({
                 text: text.trim(),
@@ -80,17 +77,9 @@ export default function GeneratePage() {
             setOutputUrl(URL.createObjectURL(blob));
         } catch (err) { console.error(err); }
         finally {
-            setGenerationProgress(100);
-            setTimeout(() => { setIsGenerating(false); setGenerationProgress(0); }, 500);
+            completeProgress();
         }
     };
-
-    useEffect(() => {
-        if (isGenerating && generationProgress < 95) {
-            const timer = setInterval(() => setGenerationProgress(prev => Math.min(prev + Math.random() * 5, 95)), 800);
-            return () => clearInterval(timer);
-        }
-    }, [isGenerating, generationProgress]);
 
     return (
         <div className="page-container">

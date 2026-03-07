@@ -2,44 +2,36 @@
 
 import React, { useState, useEffect } from "react";
 import { Languages, Loader2, Info } from "lucide-react";
-import AudioPlayer from "@/components/AudioPlayer";
-import ProgressBar from "@/components/ProgressBar";
-
-const LANGUAGES = ["English", "Hindi", "French", "Spanish", "German", "Japanese", "Chinese", "Korean", "Arabic", "Portuguese", "Italian", "Turkish", "Russian"];
+import { AudioPlayer, useSimulatedProgress } from "@resound-studio/ui";
+import { SUPPORTED_LANGUAGES } from "@resound-studio/shared";
+import type { SavedVoice } from "@resound-studio/shared";
+import { dubVoice, getVoices } from "@resound-studio/api";
 
 export default function DubbingPage() {
-    const [voices, setVoices] = useState<any[]>([]);
+    const [voices, setVoices] = useState<SavedVoice[]>([]);
     const [selectedVoice, setSelectedVoice] = useState("");
     const [text, setText] = useState("");
     const [sourceLang, setSourceLang] = useState("English");
     const [targetLang, setTargetLang] = useState("Hindi");
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [progress, setProgress] = useState(0);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const { progress, isActive, start, complete } = useSimulatedProgress();
 
-    useEffect(() => { fetch("http://localhost:8000/api/voices").then(r => r.json()).then(setVoices).catch(() => { }); }, []);
-
-    useEffect(() => {
-        if (isGenerating && progress < 95) {
-            const timer = setInterval(() => setProgress(p => Math.min(p + Math.random() * 5, 95)), 800);
-            return () => clearInterval(timer);
-        }
-    }, [isGenerating, progress]);
+    useEffect(() => { getVoices().then(setVoices).catch(() => { }); }, []);
 
     const handleDub = async () => {
         if (!selectedVoice || !text.trim()) return;
-        setIsGenerating(true); setError(null); setAudioUrl(null);
+        start();
+        setError(null);
+        setAudioUrl(null);
         try {
-            const res = await fetch("http://localhost:8000/api/dubbing", {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text, voiceId: selectedVoice, sourceLang, targetLang }),
-            });
-            if (!res.ok) { const data = await res.json(); throw new Error(data.detail || "Dubbing failed"); }
-            const blob = await res.blob();
+            const blob = await dubVoice({ text, voiceId: selectedVoice, sourceLang, targetLang });
             setAudioUrl(URL.createObjectURL(blob));
-        } catch (e: any) { setError(e.message); }
-        finally { setProgress(100); setTimeout(() => { setIsGenerating(false); setProgress(0); }, 500); }
+        } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : "Dubbing failed");
+        } finally {
+            complete();
+        }
     };
 
     return (
@@ -72,7 +64,7 @@ export default function DubbingPage() {
                 <p className="section-label" style={{ color: "#000" }}>Target Speaker</p>
                 <select value={selectedVoice} onChange={e => setSelectedVoice(e.target.value)} className="select-field">
                     <option value="">CHOOSE A CLONED VOICE...</option>
-                    {voices.map((v: any) => <option key={v.id} value={v.id}>{v.name.toUpperCase()}</option>)}
+                    {voices.map((v) => <option key={v.id} value={v.id}>{v.name.toUpperCase()}</option>)}
                 </select>
             </div>
 
@@ -83,13 +75,13 @@ export default function DubbingPage() {
                     <div>
                         <label className="section-label" style={{ fontSize: "0.65rem", marginBottom: "8px" }}>Source Lang</label>
                         <select value={sourceLang} onChange={e => setSourceLang(e.target.value)} className="select-field">
-                            {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+                            {SUPPORTED_LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
                         </select>
                     </div>
                     <div>
                         <label className="section-label" style={{ fontSize: "0.65rem", marginBottom: "8px" }}>Target Lang</label>
                         <select value={targetLang} onChange={e => setTargetLang(e.target.value)} className="select-field">
-                            {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+                            {SUPPORTED_LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
                         </select>
                     </div>
                 </div>
@@ -111,11 +103,11 @@ export default function DubbingPage() {
             <div style={{ position: "relative", marginBottom: "32px" }}>
                 <button
                     onClick={handleDub}
-                    disabled={isGenerating || !selectedVoice || !text.trim()}
+                    disabled={isActive || !selectedVoice || !text.trim()}
                     className="gen-btn"
-                    style={{ width: "100%", padding: "20px", background: isGenerating ? "#fff" : "var(--accent-purple)" }}
+                    style={{ width: "100%", padding: "20px", background: isActive ? "#fff" : "var(--accent-purple)" }}
                 >
-                    {isGenerating ? (
+                    {isActive ? (
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                             <Loader2 size={20} className="spin" strokeWidth={3} />
                             <span>TRANSLATING... {Math.round(progress)}%</span>
@@ -127,7 +119,7 @@ export default function DubbingPage() {
                         </div>
                     )}
                 </button>
-                {isGenerating && (
+                {isActive && (
                     <div style={{ position: "absolute", bottom: "-4px", left: "0", right: "4px", height: "8px", background: "#000", border: "2px solid #000", overflow: "hidden" }}>
                         <div style={{ width: `${progress}%`, height: "100%", background: "var(--accent-cyan)", transition: "width 0.3s ease" }} />
                     </div>

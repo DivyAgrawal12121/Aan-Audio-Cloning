@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { Settings, Server, Cpu, HardDrive, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
-import type { HealthData } from "@/lib/types";
+import type { HealthData } from "@resound-studio/shared";
+import { checkHealth as apiCheckHealth } from "@resound-studio/api";
 
 export default function SettingsPage() {
     const [backendUrl, setBackendUrl] = useState("http://localhost:8000");
@@ -13,8 +14,7 @@ export default function SettingsPage() {
     const checkHealth = async () => {
         setIsChecking(true);
         try {
-            const res = await fetch(`${backendUrl}/health`);
-            const data = await res.json();
+            const data = await apiCheckHealth(backendUrl);
             setHealth(data);
             setIsConnected(true);
         } catch {

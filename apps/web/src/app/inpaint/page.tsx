@@ -1,26 +1,19 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import { Eraser, Upload, Loader2, Sparkles, Info } from "lucide-react";
-import AudioPlayer from "@/components/AudioPlayer";
+import { AudioPlayer, useSimulatedProgress } from "@resound-studio/ui";
+import { inpaintAudio } from "@resound-studio/api";
 
 export default function InpaintPage() {
     const [audioFile, setAudioFile] = useState<File | null>(null);
     const [originalText, setOriginalText] = useState("");
     const [correctedText, setCorrectedText] = useState("");
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [progress, setProgress] = useState(0);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
-
-    useEffect(() => {
-        if (isProcessing && progress < 95) {
-            const timer = setInterval(() => setProgress(p => Math.min(p + Math.random() * 5, 95)), 800);
-            return () => clearInterval(timer);
-        }
-    }, [isProcessing, progress]);
+    const { progress, isActive, start, complete } = useSimulatedProgress();
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -29,18 +22,21 @@ export default function InpaintPage() {
 
     const handleInpaint = async () => {
         if (!audioFile || !originalText.trim() || !correctedText.trim()) return;
-        setIsProcessing(true); setError(null); setAudioUrl(null);
+        start();
+        setError(null);
+        setAudioUrl(null);
         const formData = new FormData();
         formData.append("audio", audioFile);
         formData.append("original_text", originalText);
         formData.append("corrected_text", correctedText);
         try {
-            const res = await fetch("http://localhost:8000/api/inpaint", { method: "POST", body: formData });
-            if (!res.ok) { const data = await res.json(); throw new Error(data.detail || "Inpainting failed"); }
-            const blob = await res.blob();
+            const blob = await inpaintAudio(formData);
             setAudioUrl(URL.createObjectURL(blob));
-        } catch (e: any) { setError(e.message); }
-        finally { setProgress(100); setTimeout(() => { setIsProcessing(false); setProgress(0); }, 500); }
+        } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : "Inpainting failed");
+        } finally {
+            complete();
+        }
     };
 
     return (
@@ -113,11 +109,11 @@ export default function InpaintPage() {
             <div style={{ position: "relative", marginBottom: "32px" }}>
                 <button
                     onClick={handleInpaint}
-                    disabled={isProcessing || !audioFile || !originalText.trim() || !correctedText.trim()}
+                    disabled={isActive || !audioFile || !originalText.trim() || !correctedText.trim()}
                     className="gen-btn"
-                    style={{ width: "100%", padding: "20px", background: isProcessing ? "#fff" : "var(--accent-purple)" }}
+                    style={{ width: "100%", padding: "20px", background: isActive ? "#fff" : "var(--accent-purple)" }}
                 >
-                    {isProcessing ? (
+                    {isActive ? (
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                             <Loader2 size={20} className="spin" strokeWidth={3} />
                             <span>PUNCHING IN... {Math.round(progress)}%</span>
@@ -129,7 +125,7 @@ export default function InpaintPage() {
                         </div>
                     )}
                 </button>
-                {isProcessing && (
+                {isActive && (
                     <div style={{ position: "absolute", bottom: "-4px", left: "0", right: "4px", height: "8px", background: "#000", border: "2px solid #000", overflow: "hidden" }}>
                         <div style={{ width: `${progress}%`, height: "100%", background: "var(--accent-pink)", transition: "width 0.3s ease" }} />
                     </div>

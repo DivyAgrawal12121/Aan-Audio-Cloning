@@ -7,7 +7,7 @@ import {
     Mic, Volume2, Library, Sparkles, Home, Settings, Waves,
     Music, Languages, Podcast, Eraser, HardDrive
 } from "lucide-react";
-import ModelSelector from "./ModelSelector";
+import { ModelSelector } from "@resound-studio/ui";
 
 const NAV_ITEMS = [
     { href: "/", label: "Dashboard", icon: Home },

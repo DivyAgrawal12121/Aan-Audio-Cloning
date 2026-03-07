@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Mic, Trash2, Play, Globe } from "lucide-react";
-import type { SavedVoice } from "@/lib/types";
+import type { SavedVoice } from "@resound-studio/shared";
 
 interface VoiceCardProps {
     voice: SavedVoice;

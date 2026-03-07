@@ -6,55 +6,9 @@ import {
     Cpu, ChevronDown, Check, Loader2, AlertCircle, X,
     HardDrive, Download, Zap,
 } from "lucide-react";
-
-/* ─── Types ─── */
-interface ModelInfo {
-    name: string;
-    description: string;
-    vram_estimate: string;
-    download_size: string;
-    capabilities: string[];
-    features: string[];
-    is_downloaded?: boolean;
-}
-
-interface ModelsResponse {
-    active: string;
-    models: Record<string, ModelInfo>;
-}
-
-interface ProgressEvent {
-    phase: string;
-    percent: number;
-    message: string;
-    downloaded_mb: number;
-    total_mb: number;
-    speed_mbps: number;
-    eta_seconds: number;
-    model_id: string;
-    model_name: string;
-}
-
-/* ─── Capability Tag Styles ─── */
-const CAP_STYLE: Record<string, { label: string; color: string; bg: string }> = {
-    clone: { label: "Clone", color: "#000", bg: "var(--accent-purple)" },
-    generate: { label: "TTS", color: "#000", bg: "var(--accent-cyan)" },
-    design: { label: "Design", color: "#000", bg: "var(--accent-pink)" },
-    foley: { label: "Foley", color: "#000", bg: "var(--accent-amber)" },
-    music: { label: "Music", color: "#000", bg: "var(--accent-amber)" },
-    emotion: { label: "Emotion", color: "#000", bg: "var(--accent-pink)" },
-    cross_lingual: { label: "Multilingual", color: "#000", bg: "var(--accent-purple)" },
-    speed: { label: "Fast", color: "#000", bg: "var(--accent-green)" },
-};
-
-const PHASE_COLORS: Record<string, string> = {
-    unloading: "#f59e0b",
-    importing: "#a855f7",
-    downloading: "#06b6d4",
-    loading_gpu: "#ec4899",
-    ready: "#22c55e",
-    error: "#ef4444",
-};
+import type { ModelInfo, ModelProgressEvent } from "@resound-studio/shared";
+import { CAP_STYLE, PHASE_COLORS } from "@resound-studio/shared";
+import { getModels, getModelLoadStreamUrl } from "@resound-studio/api";
 
 function getVramColor(estimate: string): string {
     const num = parseFloat(estimate);
@@ -83,7 +37,7 @@ function Portal({ children }: { children: React.ReactNode }) {
 }
 
 /* ─── Progress Bar Component ─── */
-function LoadingProgressBar({ progress }: { progress: ProgressEvent }) {
+function LoadingProgressBar({ progress }: { progress: ModelProgressEvent }) {
     const phaseColor = PHASE_COLORS[progress.phase] || "#a855f7";
     const showDownloadStats = progress.phase === "downloading" && progress.total_mb > 0;
 
@@ -174,16 +128,13 @@ export default function ModelSelector() {
     const [models, setModels] = useState<Record<string, ModelInfo>>({});
     const [activeModelId, setActiveModelId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [loadProgress, setLoadProgress] = useState<ProgressEvent | null>(null);
+    const [loadProgress, setLoadProgress] = useState<ModelProgressEvent | null>(null);
 
     const fetchModels = useCallback(async () => {
         try {
-            const res = await fetch("http://localhost:8000/api/models", { cache: 'no-store' });
-            if (res.ok) {
-                const data: ModelsResponse = await res.json();
-                setModels(data.models);
-                setActiveModelId(data.active);
-            }
+            const data = await getModels();
+            setModels(data.models);
+            setActiveModelId(data.active);
         } catch (e) { console.error("Failed to fetch models", e); }
     }, []);
 
@@ -196,12 +147,10 @@ export default function ModelSelector() {
         setLoadProgress(null);
 
         try {
-            const eventSource = new EventSource(
-                `http://localhost:8000/api/models/load-stream?model_id=${encodeURIComponent(modelId)}`
-            );
+            const eventSource = new EventSource(getModelLoadStreamUrl(modelId));
 
             eventSource.onmessage = (event) => {
-                const data: ProgressEvent = JSON.parse(event.data);
+                const data: ModelProgressEvent = JSON.parse(event.data);
                 setLoadProgress(data);
                 if (data.phase === "ready") {
                     setActiveModelId(data.model_id);
