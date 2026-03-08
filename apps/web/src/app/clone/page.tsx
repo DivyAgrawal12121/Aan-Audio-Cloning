@@ -5,6 +5,8 @@ import { Mic, Loader2, CheckCircle2, AlertCircle, Info } from "lucide-react";
 import { AudioUploader, AudioPlayer, useSimulatedProgress } from "@resound-studio/ui";
 import { SUPPORTED_LANGUAGES } from "@resound-studio/shared";
 import { cloneVoice } from "@resound-studio/api";
+import { useChannels } from "@/hooks/api/useChannels";
+import { useServerStore } from "@/stores/useServerStore";
 
 export default function ClonePage() {
     const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -12,9 +14,13 @@ export default function ClonePage() {
     const [description, setDescription] = useState("");
     const [language, setLanguage] = useState("English");
     const [tags, setTags] = useState("");
+    const [channelId, setChannelId] = useState("");
     const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
     const [statusMessage, setStatusMessage] = useState("");
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const { data: channels = [] } = useChannels();
+    const { capabilities, activeModel } = useServerStore();
+    const isSupported = capabilities.includes("clone");
     const { progress: cloneProgress, isActive: isCloning, start: startProgress, complete: completeProgress } = useSimulatedProgress();
 
     // Create preview URL when file is selected
@@ -43,6 +49,7 @@ export default function ClonePage() {
             formData.append("name", voiceName.trim());
             formData.append("description", description.trim());
             formData.append("language", language);
+            if (channelId) formData.append("channel_id", channelId);
             formData.append(
                 "tags",
                 JSON.stringify(
@@ -61,6 +68,7 @@ export default function ClonePage() {
             setVoiceName("");
             setDescription("");
             setTags("");
+            setChannelId("");
             handleClear();
         } catch (err: unknown) {
             setStatus("error");
@@ -92,8 +100,16 @@ export default function ClonePage() {
                 </div>
             </div>
 
+            {/* Warning Banner */}
+            {!isSupported && activeModel && (
+                <div style={{ padding: "16px", marginBottom: "20px", background: "#fee2e2", border: "var(--border-thin)", boxShadow: "4px 4px 0px #000", display: "flex", gap: "10px", alignItems: "center" }}>
+                    <AlertCircle size={20} color="#ef4444" strokeWidth={3} />
+                    <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "#ef4444" }}>WARNING: THE ACTIVE ENGINE ({activeModel.toUpperCase()}) DOES NOT SUPPORT ZERO-SHOT CLONING.</span>
+                </div>
+            )}
+
             {/* Upload Section */}
-            <div className="glass-card" style={{ padding: "28px", marginBottom: "20px" }}>
+            <div className="glass-card" style={{ padding: "28px", marginBottom: "20px", opacity: !isSupported && activeModel ? 0.6 : 1, pointerEvents: !isSupported && activeModel ? "none" : "auto" }}>
                 <p className="section-label" style={{ color: "#000", fontWeight: 900 }}>Step 1: Audio Sample</p>
                 <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "20px", fontWeight: 500 }}>
                     Upload 3-10 seconds of clean speech. Use high-quality audio for better accuracy.
@@ -136,6 +152,20 @@ export default function ClonePage() {
                         >
                             {SUPPORTED_LANGUAGES.map((lang) => (
                                 <option key={lang} value={lang}>{lang}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="section-label" style={{ fontSize: "0.65rem", marginBottom: "8px" }}>Audio Channel Routing (Optional)</label>
+                        <select
+                            className="select-field"
+                            value={channelId}
+                            onChange={(e) => setChannelId(e.target.value)}
+                        >
+                            <option value="">Default OS Device</option>
+                            {channels.map((ch) => (
+                                <option key={ch.id} value={ch.id}>{ch.name}</option>
                             ))}
                         </select>
                     </div>

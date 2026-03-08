@@ -199,73 +199,137 @@ def detect_dialogue(text: str) -> List[Dict[str, str]]:
 VOICE_EXPORT_VERSION = "1.0"
 
 
-def export_voice(voice_id: str, voices_dir: str) -> bytes:
+def export_voice(voice_id: str, db) -> bytes:
     """
     Export a voice as a .resound ZIP file containing:
-    - meta.json (voice metadata)
-    - embedding.pt (voice embedding)
-    - sample.wav (reference audio)
+    - meta.json (voice metadata and sample list)
+    - embedding.pt (if exists)
+    - sample_X.wav files
     """
-    voice_dir = os.path.join(voices_dir, voice_id)
-    if not os.path.exists(voice_dir):
-        raise FileNotFoundError(f"Voice directory not found: {voice_id}")
+    from database import VoiceProfile, ProfileSample
+    
+    profile = db.query(VoiceProfile).filter(VoiceProfile.id == voice_id).first()
+    if not profile:
+        raise FileNotFoundError(f"Voice profile not found: {voice_id}")
+
+    samples = db.query(ProfileSample).filter(ProfileSample.profile_id == voice_id).all()
 
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Add export metadata
+        # Add metadata
         export_meta = {
-            "export_version": VOICE_EXPORT_VERSION,
+            "export_version": "2.0",
             "exported_at": datetime.utcnow().isoformat() + "Z",
-            "voice_id": voice_id,
+            "profile": {
+                "name": profile.name,
+                "description": profile.description,
+                "language": profile.language,
+                "tags": profile.tags,
+            },
+            "samples": [
+                {
+                    "filename": f"sample_{i}.wav",
+                    "reference_text": s.reference_text,
+                    "is_primary": s.is_primary,
+                } for i, s in enumerate(samples)
+            ]
         }
-        zf.writestr("export.json", json.dumps(export_meta, indent=2))
+        zf.writestr("meta.json", json.dumps(export_meta, indent=2))
 
         # Add voice files
-        for filename in ["meta.json", "embedding.pt", "sample.wav"]:
-            filepath = os.path.join(voice_dir, filename)
-            if os.path.exists(filepath):
-                zf.write(filepath, filename)
+        for i, s in enumerate(samples):
+            if os.path.exists(s.audio_path):
+                zf.write(s.audio_path, f"sample_{i}.wav")
+            
+            # Pack the embedding of the primary sample if we can infer it
+            if s.is_primary and s.embedding_path and os.path.exists(s.embedding_path):
+                zf.write(s.embedding_path, "embedding.pt")
 
     buffer.seek(0)
     return buffer.getvalue()
 
 
-def import_voice(resound_bytes: bytes, voices_dir: str) -> dict:
+def import_voice(resound_bytes: bytes, db, voices_dir: str) -> dict:
     """
-    Import a .resound file. Returns the imported voice metadata.
+    Import a .resound file into the database.
+    Returns the imported voice metadata.
     """
     import uuid
-
+    from database import VoiceProfile, ProfileSample
+    
     buffer = io.BytesIO(resound_bytes)
     with zipfile.ZipFile(buffer, "r") as zf:
         names = zf.namelist()
         if "meta.json" not in names:
             raise ValueError("Invalid .resound file: missing meta.json")
 
-        # Read original metadata
         meta = json.loads(zf.read("meta.json"))
+        profile_data = meta.get("profile", {})
+        
+        # Fallback for v1.0 exports
+        if "id" in meta and "profile" not in meta:
+             profile_data = {
+                 "name": meta.get("name", "Imported Voice"),
+                 "description": meta.get("description", ""),
+                 "language": meta.get("language", "English"),
+             }
 
-        # Generate new voice ID for the import
+        # Create Profile
         new_id = str(uuid.uuid4())
+        profile = VoiceProfile(
+            id=new_id,
+            name=profile_data.get("name", "Imported Voice"),
+            description=profile_data.get("description", ""),
+            language=profile_data.get("language", "English"),
+            tags=profile_data.get("tags", "[]")
+        )
+        db.add(profile)
+
+        # Create physical directory
         new_dir = os.path.join(voices_dir, new_id)
         os.makedirs(new_dir, exist_ok=True)
+        
+        # Restore samples and embeddings
+        sample_meta_list = meta.get("samples", [])
+        
+        # Legacy v1.0 support
+        if not sample_meta_list and "sample.wav" in names:
+            sample_meta_list = [{"filename": "sample.wav", "reference_text": "", "is_primary": True}]
+            
+        for s_meta in sample_meta_list:
+            fname = s_meta.get("filename")
+            if fname in names:
+                disk_path = os.path.join(new_dir, fname)
+                with open(disk_path, "wb") as f:
+                    f.write(zf.read(fname))
+                    
+                # Setup embedding path
+                emb_path = None
+                if s_meta.get("is_primary") and "embedding.pt" in names:
+                    emb_path = os.path.join(new_dir, "embedding.pt")
+                    with open(emb_path, "wb") as f:
+                        f.write(zf.read("embedding.pt"))
+                
+                sample = ProfileSample(
+                    profile_id=new_id,
+                    audio_path=disk_path,
+                    embedding_path=emb_path,
+                    reference_text=s_meta.get("reference_text", ""),
+                    is_primary=s_meta.get("is_primary", False)
+                )
+                db.add(sample)
+        
+        db.commit()
 
-        # Extract files
-        for filename in ["embedding.pt", "sample.wav"]:
-            if filename in names:
-                with open(os.path.join(new_dir, filename), "wb") as f:
-                    f.write(zf.read(filename))
-
-        # Update metadata with new ID
-        meta["id"] = new_id
-        meta["importedAt"] = datetime.utcnow().isoformat() + "Z"
-        meta["embeddingPath"] = os.path.join(new_dir, "embedding.pt")
-        meta["audioSampleUrl"] = f"/api/voices/{new_id}/sample"
-
-        with open(os.path.join(new_dir, "meta.json"), "w") as f:
-            json.dump(meta, f, indent=2)
-
-    return meta
+    return {
+        "id": profile.id,
+        "name": profile.name,
+        "description": profile.description,
+        "language": profile.language,
+        "tags": profile.tags,
+        "engine_id": profile.engine_id,
+        "created_at": profile.created_at,
+    }
 
 
 # ==============================

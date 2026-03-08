@@ -4,7 +4,9 @@ import React, { useState } from "react";
 import { Sparkles, Loader2, Wand2, CheckCircle2, AlertCircle, Info } from "lucide-react";
 import { AudioPlayer, useSimulatedProgress } from "@resound-studio/ui";
 import { SUPPORTED_LANGUAGES } from "@resound-studio/shared";
-import { designVoice, previewVoice } from "@resound-studio/api";
+import { previewDesignVoice, cloneVoice } from "@resound-studio/api";
+import { useChannels } from "@/hooks/api/useChannels";
+import { useServerStore } from "@/stores/useServerStore";
 
 const VOICE_PRESETS = [
     {
@@ -29,32 +31,61 @@ export default function DesignPage() {
     const [description, setDescription] = useState("");
     const [voiceName, setVoiceName] = useState("");
     const [language, setLanguage] = useState("English");
+    const [age, setAge] = useState("Middle-aged");
+    const [gender, setGender] = useState("Male");
+    const [tone, setTone] = useState("Neutral");
+    const [channelId, setChannelId] = useState("");
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
     const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
     const [statusMessage, setStatusMessage] = useState("");
+    const { data: channels = [] } = useChannels();
+    const { capabilities, activeModel } = useServerStore();
+    const isSupported = capabilities.includes("design");
     const { progress: designProgress, isActive: isDesigning, start: startProgress, complete: completeProgress } = useSimulatedProgress();
 
-    const handleDesign = async () => {
-        if (!description.trim() || !voiceName.trim()) return;
-
+    const handlePreview = async () => {
         startProgress();
         setStatus("idle");
+        setAudioBlob(null);
+
+        const finalPrompt = `A ${age.toLowerCase()} ${gender.toLowerCase()} voice with a ${tone.toLowerCase()} tone. ${description.trim()}`.trim();
 
         try {
-            const voice = await designVoice(description.trim(), voiceName.trim(), language);
-            try {
-                const blob = await previewVoice(voice.id);
-                if (previewUrl) URL.revokeObjectURL(previewUrl);
-                setPreviewUrl(URL.createObjectURL(blob));
-            } catch { }
-
-            setStatus("success");
-            setStatusMessage(`VOICE "${voiceName.toUpperCase()}" CREATED!`);
+            const blob = await previewDesignVoice(finalPrompt, language);
+            setAudioBlob(blob);
+            if (previewUrl) URL.revokeObjectURL(previewUrl);
+            setPreviewUrl(URL.createObjectURL(blob));
         } catch (err: unknown) {
             setStatus("error");
-            setStatusMessage("DESIGN FAILED. CHECK BACKEND.");
+            setStatusMessage("DESIGN PREVIEW FAILED.");
         } finally {
             completeProgress();
+        }
+    };
+
+    const handleSave = async () => {
+        if (!voiceName.trim() || !audioBlob) return;
+        setStatus("idle");
+        try {
+            const formData = new FormData();
+            formData.append("audio", audioBlob, "design_preview.wav");
+            formData.append("name", voiceName.trim());
+            formData.append("description", description.trim());
+            formData.append("language", language);
+            formData.append("tags", JSON.stringify(["designed"]));
+            if (channelId) formData.append("channel_id", channelId);
+
+            await cloneVoice(formData);
+            setStatus("success");
+            setStatusMessage(`VOICE "${voiceName.toUpperCase()}" SAVED TO WORKSPACE!`);
+
+            // clear form for next design
+            setAudioBlob(null);
+            setVoiceName("");
+        } catch (err: unknown) {
+            setStatus("error");
+            setStatusMessage("FAILED TO SAVE VOICE.");
         }
     };
 
@@ -71,18 +102,47 @@ export default function DesignPage() {
                 </div>
             </div>
 
+            {/* Warning Banner */}
+            {!isSupported && activeModel && (
+                <div style={{ padding: "16px", marginBottom: "20px", background: "#fee2e2", border: "var(--border-thin)", boxShadow: "4px 4px 0px #000", display: "flex", gap: "10px", alignItems: "center" }}>
+                    <AlertCircle size={20} color="#ef4444" strokeWidth={3} />
+                    <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "#ef4444" }}>WARNING: THE ACTIVE ENGINE ({activeModel.toUpperCase()}) DOES NOT SUPPORT VOICE DESIGN FROM TEXT.</span>
+                </div>
+            )}
+
             {/* Design Form */}
-            <div className="section-card" style={{ marginBottom: "20px" }}>
+            <div className="section-card" style={{ marginBottom: "20px", opacity: !isSupported && activeModel ? 0.6 : 1, pointerEvents: !isSupported && activeModel ? "none" : "auto" }}>
                 <p className="section-label" style={{ color: "#000" }}>Voice Blueprint</p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+                    <div>
+                        <label style={{ fontSize: "0.65rem", fontWeight: 800, textTransform: "uppercase" }}>Age</label>
+                        <select className="select-field" value={age} onChange={e => setAge(e.target.value)}>
+                            {["Young", "Middle-aged", "Elderly"].map(v => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label style={{ fontSize: "0.65rem", fontWeight: 800, textTransform: "uppercase" }}>Gender</label>
+                        <select className="select-field" value={gender} onChange={e => setGender(e.target.value)}>
+                            {["Male", "Female", "Androgynous"].map(v => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label style={{ fontSize: "0.65rem", fontWeight: 800, textTransform: "uppercase" }}>Tone</label>
+                        <select className="select-field" value={tone} onChange={e => setTone(e.target.value)}>
+                            {["Neutral", "Authoritative", "Friendly", "Gravelly", "Energetic", "Calm", "Raspy"].map(v => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                    </div>
+                </div>
+
                 <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "16px", fontWeight: 500 }}>
-                    Describe the timbre, age, and personality of your ideal voice.
+                    Add extra nuances to the timbre and personality (Optional).
                 </p>
                 <textarea
                     className="text-area"
-                    placeholder="e.g., A deep, gravelly male voice from the South. Reassuring and slow..."
+                    placeholder="e.g., Speaks with a slight Southern drawl..."
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    style={{ minHeight: "140px" }}
+                    style={{ minHeight: "100px" }}
                 />
             </div>
 
@@ -120,28 +180,51 @@ export default function DesignPage() {
                 </div>
             </div>
 
-            {/* Save Info */}
-            <div className="section-card" style={{ marginBottom: "20px" }}>
-                <p className="section-label" style={{ color: "#000" }}>Identity</p>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "12px" }}>
-                    <div>
-                        <label className="section-label" style={{ fontSize: "0.65rem", marginBottom: "8px" }}>Voice Name *</label>
-                        <input type="text" className="input-field" placeholder="e.g. Cinema King" value={voiceName} onChange={(e) => setVoiceName(e.target.value)} />
-                    </div>
-                    <div>
-                        <label className="section-label" style={{ fontSize: "0.65rem", marginBottom: "8px" }}>Language</label>
-                        <select className="select-field" value={language} onChange={(e) => setLanguage(e.target.value)}>
-                            {SUPPORTED_LANGUAGES.map((lang) => <option key={lang} value={lang}>{lang}</option>)}
-                        </select>
-                    </div>
-                </div>
-            </div>
-
+            {/* Preview Only */}
             {previewUrl && (
                 <div style={{ marginBottom: "20px" }}>
-                    <AudioPlayer audioUrl={previewUrl} label="DESIGN PREVIEW" showDownload={false} />
+                    <AudioPlayer audioUrl={previewUrl} label="DESIGN PREVIEW (UNSAVED)" showDownload={false} channelId={channelId} />
                 </div>
             )}
+
+            {/* Save Info */}
+            {audioBlob && (
+                <div className="section-card" style={{ marginBottom: "20px", border: "4px solid var(--accent-amber)" }}>
+                    <p className="section-label" style={{ color: "#000" }}>Save to Voice Studio</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "12px" }}>
+                        <div>
+                            <label className="section-label" style={{ fontSize: "0.65rem", marginBottom: "8px" }}>Voice Name *</label>
+                            <input type="text" className="input-field" placeholder="e.g. Cinema King" value={voiceName} onChange={(e) => setVoiceName(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="section-label" style={{ fontSize: "0.65rem", marginBottom: "8px" }}>Language</label>
+                            <select className="select-field" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                                {SUPPORTED_LANGUAGES.map((lang) => <option key={lang} value={lang}>{lang}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="section-label" style={{ fontSize: "0.65rem", marginBottom: "8px" }}>Audio Channel Routing (Optional)</label>
+                            <select className="select-field" value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+                                <option value="">Default OS Device</option>
+                                {channels.map((ch) => <option key={ch.id} value={ch.id}>{ch.name}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <button
+                        className="gen-btn"
+                        onClick={handleSave}
+                        disabled={!voiceName.trim() || isDesigning}
+                        style={{ width: "100%", padding: "16px", background: "var(--accent-green)", marginTop: "20px" }}
+                    >
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <CheckCircle2 size={16} strokeWidth={3} />
+                            <span>SAVE TO WORKSPACE</span>
+                        </div>
+                    </button>
+                </div>
+            )}
+
+
 
             {/* Status */}
             {status !== "idle" && (
@@ -159,8 +242,8 @@ export default function DesignPage() {
             <div style={{ position: "relative", marginBottom: "32px" }}>
                 <button
                     className="gen-btn"
-                    onClick={handleDesign}
-                    disabled={!description.trim() || !voiceName.trim() || isDesigning}
+                    onClick={handlePreview}
+                    disabled={isDesigning || !description.trim() && age === 'Middle-aged' && tone === 'Neutral'}
                     style={{ width: "100%", padding: "20px", background: isDesigning ? "#fff" : "var(--accent-pink)" }}
                 >
                     {isDesigning ? (
@@ -170,8 +253,8 @@ export default function DesignPage() {
                         </div>
                     ) : (
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                            <Sparkles size={20} strokeWidth={3} />
-                            <span>DESIGN & SAVE VOICE</span>
+                            <Wand2 size={20} strokeWidth={3} />
+                            <span>GENERATE PREVIEW</span>
                         </div>
                     )}
                 </button>

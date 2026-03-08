@@ -1,13 +1,14 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
     Mic, Volume2, Library, Sparkles, Home, Settings, Waves,
-    Music, Languages, Podcast, Eraser, HardDrive
+    Music, Languages, Podcast, Eraser, HardDrive, Clock, Headphones
 } from "lucide-react";
 import { ModelSelector } from "@resound-studio/ui";
+import { useServerStore } from "@/stores/useServerStore";
 
 const NAV_ITEMS = [
     { href: "/", label: "Dashboard", icon: Home },
@@ -16,15 +17,23 @@ const NAV_ITEMS = [
     { href: "/design", label: "Voice Design", icon: Sparkles },
     { href: "/foley", label: "Sound Effects", icon: Music },
     { href: "/dubbing", label: "Voice Dubbing", icon: Languages },
-    { href: "/podcast", label: "Podcast Studio", icon: Podcast },
+    { href: "/stories", label: "Timeline Editor", icon: Podcast },
     { href: "/inpaint", label: "Audio Inpainting", icon: Eraser },
     { href: "/voices", label: "My Voices", icon: Library },
+    { href: "/history", label: "History", icon: Clock },
     { href: "/models", label: "Model Manager", icon: HardDrive },
+    { href: "/channels", label: "Audio Channels", icon: Headphones },
     { href: "/logs", label: "Server Logs", icon: Settings },
 ];
 
 export default function Sidebar() {
     const pathname = usePathname();
+    const { status, activeModel, startPolling, stopPolling, setCapabilities } = useServerStore();
+
+    useEffect(() => {
+        startPolling(5000);
+        return () => stopPolling();
+    }, [startPolling, stopPolling]);
 
     return (
         <aside
@@ -99,9 +108,8 @@ export default function Sidebar() {
                 </div>
             </Link>
 
-            {/* AI Model Selector */}
             <div style={{ padding: "0 16px", marginBottom: "32px", flexShrink: 0 }}>
-                <ModelSelector />
+                <ModelSelector onEngineUpdate={(id: string, caps: string[]) => setCapabilities(caps)} />
             </div>
 
             {/* Navigation */}
@@ -180,18 +188,29 @@ export default function Sidebar() {
                     gap: "10px",
                     background: "white",
                 }}
+                className="group relative cursor-pointer hover:bg-slate-50 transition-colors"
+                title={activeModel ? `Active Model: ${activeModel}` : "Checking Status..."}
             >
                 <div
                     style={{
                         width: 10,
                         height: 10,
-                        background: "var(--accent-green)",
+                        background: status === "online" ? "var(--accent-green)" : status === "checking" ? "var(--accent-yellow)" : "var(--accent-red)",
                         border: "1px solid #000",
                     }}
+                    className={status === "checking" ? "animate-pulse" : ""}
                 />
                 <span style={{ fontSize: "0.75rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                    GPU System Online
+                    {status === "online" ? "System Online" : status === "checking" ? "Connecting..." : "System Offline"}
                 </span>
+
+                {/* Tooltip for model */}
+                {activeModel && status === "online" && (
+                    <div className="absolute bottom-full left-0 mb-4 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none bg-slate-900 border-2 border-slate-900 text-white text-xs font-bold p-2 shadow-[4px_4px_0_var(--accent-pink)] z-50">
+                        Engine: <span className="text-emerald-400">{activeModel}</span>
+                        <div className="absolute top-full left-4 w-2 h-2 bg-slate-900 rotate-45 -mt-1 border-r-2 border-b-2 border-slate-900" />
+                    </div>
+                )}
             </div>
         </aside>
     );

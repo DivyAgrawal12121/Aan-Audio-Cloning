@@ -7,12 +7,14 @@ interface AudioPlayerProps {
     audioUrl: string | null;
     label?: string;
     showDownload?: boolean;
+    channelId?: string | null;
 }
 
 export default function AudioPlayer({
     audioUrl,
     label,
     showDownload = true,
+    channelId,
 }: AudioPlayerProps) {
     const audioRef = useRef<HTMLAudioElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -78,6 +80,38 @@ export default function AudioPlayer({
             if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
         };
     }, [audioUrl, isPlaying, currentTime, duration]);
+
+    // Apply Audio Device Routing
+    useEffect(() => {
+        if (!audioRef.current) return;
+
+        // Dynamic import of the store allows the UI package to remain framework agnostic 
+        // while bridging into the Next.js app's global state if available.
+        // But for simplicity here, we can just read from localStorage directly since
+        // zustand/persist uses it, or we expect the parent to pass down the resolved sinkId.
+        // Actually, the cleanest way without importing app-level stores into a UI package
+        // is to read from localStorage 'resound-audio-routing' or rely on the parent.
+
+        let sinkId = "default";
+        if (channelId) {
+            try {
+                const storage = localStorage.getItem('resound-audio-routing');
+                if (storage) {
+                    const parsed = JSON.parse(storage);
+                    const mapping = parsed?.state?.deviceMappings?.[channelId];
+                    if (mapping) sinkId = mapping;
+                }
+            } catch (error) {
+                console.error("Failed to read routing state:", error);
+            }
+        }
+
+        // HTMLAudioElement setSinkId is still experimental in some environments
+        if (typeof (audioRef.current as any).setSinkId === 'function') {
+            (audioRef.current as any).setSinkId(sinkId)
+                .catch((e: any) => console.warn("Failed to set sink id:", e));
+        }
+    }, [channelId, audioUrl]);
 
     const togglePlay = () => {
         if (!audioRef.current) return;

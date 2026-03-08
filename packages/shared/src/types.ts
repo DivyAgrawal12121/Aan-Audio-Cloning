@@ -8,9 +8,22 @@ export interface SavedVoice {
     description: string;
     language: string;
     createdAt: string;
+    updatedAt?: string;
     audioSampleUrl?: string;
-    embeddingPath: string;
+    embeddingPath?: string;
+    avatar_path?: string | null;
+    engine_id?: string;
     tags: string[];
+    sample_count?: number;
+    channel_id?: string | null;
+}
+
+export interface AudioChannel {
+    id: string;
+    name: string;
+    color: string;
+    created_at: string;
+    updated_at: string;
 }
 
 export interface GenerationRequest {
@@ -100,4 +113,25 @@ export interface ModelProgressEvent {
     eta_seconds: number;
     model_id: string;
     model_name: string;
+}
+
+export interface StoryItemResponse {
+    id: string;
+    story_id: string;
+    generation_id: string;
+    position_ms: number;
+    track: number;
+    trim_start_ms: number;
+    trim_end_ms: number;
+    created_at: string;
+    generation?: any;
+}
+
+export interface StoryResponse {
+    id: string;
+    name: string;
+    description: string;
+    created_at: string;
+    updated_at: string;
+    items: StoryItemResponse[];
 }

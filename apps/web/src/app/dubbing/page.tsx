@@ -6,6 +6,7 @@ import { AudioPlayer, useSimulatedProgress } from "@resound-studio/ui";
 import { SUPPORTED_LANGUAGES } from "@resound-studio/shared";
 import type { SavedVoice } from "@resound-studio/shared";
 import { dubVoice, getVoices } from "@resound-studio/api";
+import { useServerStore } from "@/stores/useServerStore";
 
 export default function DubbingPage() {
     const [voices, setVoices] = useState<SavedVoice[]>([]);
@@ -16,6 +17,8 @@ export default function DubbingPage() {
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const { progress, isActive, start, complete } = useSimulatedProgress();
+    const { capabilities, activeModel } = useServerStore();
+    const isSupported = capabilities.includes("cross_lingual");
 
     useEffect(() => { getVoices().then(setVoices).catch(() => { }); }, []);
 
@@ -48,19 +51,26 @@ export default function DubbingPage() {
             </div>
 
             {/* Model Requirement Banner */}
-            <div className="section-card" style={{ marginBottom: "20px", background: "var(--bg-secondary)", display: "flex", gap: "12px", alignItems: "start" }}>
-                <div style={{ width: 40, height: 40, background: "#000", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <Info size={20} color="var(--accent-cyan)" strokeWidth={3} />
+            {!isSupported && activeModel ? (
+                <div style={{ padding: "16px", marginBottom: "20px", background: "#fee2e2", border: "var(--border-thin)", boxShadow: "4px 4px 0px #000", display: "flex", gap: "10px", alignItems: "center" }}>
+                    <Info size={20} color="#ef4444" strokeWidth={3} />
+                    <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "#ef4444" }}>WARNING: THE ACTIVE ENGINE ({activeModel.toUpperCase()}) DOES NOT SUPPORT MULTILINGUAL DUBBING.</span>
                 </div>
-                <div>
-                    <p style={{ fontSize: "0.85rem", fontWeight: 800, textTransform: "uppercase", marginBottom: "4px" }}>Engine Requirement</p>
-                    <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)" }}>
-                        Requires <strong>CosyVoice</strong> or <strong>XTTS v2</strong>. Switch engines in the sidebar if needed.
-                    </p>
+            ) : (
+                <div className="section-card" style={{ marginBottom: "20px", background: "var(--bg-secondary)", display: "flex", gap: "12px", alignItems: "start" }}>
+                    <div style={{ width: 40, height: 40, background: "#000", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Info size={20} color="var(--accent-cyan)" strokeWidth={3} />
+                    </div>
+                    <div>
+                        <p style={{ fontSize: "0.85rem", fontWeight: 800, textTransform: "uppercase", marginBottom: "4px" }}>Engine Requirement</p>
+                        <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)" }}>
+                            Requires an engine with <strong>MULTILINGUAL</strong> capabilities. Switch engines in the sidebar if needed.
+                        </p>
+                    </div>
                 </div>
-            </div>
+            )}
 
-            <div className="section-card" style={{ marginBottom: "20px" }}>
+            <div className="section-card" style={{ marginBottom: "20px", opacity: !isSupported && activeModel ? 0.6 : 1, pointerEvents: !isSupported && activeModel ? "none" : "auto" }}>
                 <p className="section-label" style={{ color: "#000" }}>Target Speaker</p>
                 <select value={selectedVoice} onChange={e => setSelectedVoice(e.target.value)} className="select-field">
                     <option value="">CHOOSE A CLONED VOICE...</option>
@@ -136,7 +146,12 @@ export default function DubbingPage() {
             {/* Result */}
             {audioUrl && (
                 <div style={{ marginTop: "20px" }}>
-                    <AudioPlayer audioUrl={audioUrl} label="DUBBED OUTPUT" showDownload />
+                    <AudioPlayer
+                        audioUrl={audioUrl}
+                        label="DUBBED OUTPUT"
+                        showDownload
+                        channelId={voices.find(v => v.id === selectedVoice)?.channel_id}
+                    />
                 </div>
             )}
         </div>

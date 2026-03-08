@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Mic, Trash2, Play, Globe } from "lucide-react";
+import { Mic, Trash2, Play, Globe, Library } from "lucide-react";
 import type { SavedVoice } from "@resound-studio/shared";
 
 interface VoiceCardProps {
@@ -112,6 +112,22 @@ export default function VoiceCard({
                         <Globe size={11} strokeWidth={3} />
                         {voice.language}
                     </span>
+                    {voice.sample_count !== undefined && (
+                        <span
+                            style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                fontSize: "0.65rem",
+                                fontWeight: 800,
+                                color: "var(--text-muted)",
+                                textTransform: "uppercase"
+                            }}
+                        >
+                            <Library size={11} strokeWidth={3} />
+                            {voice.sample_count} {voice.sample_count === 1 ? "Sample" : "Samples"}
+                        </span>
+                    )}
                     <span
                         style={{
                             fontSize: "0.65rem",

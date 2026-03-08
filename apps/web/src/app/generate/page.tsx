@@ -180,7 +180,7 @@ export default function GeneratePage() {
                         )}
                     </div>
 
-                    <AudioPlayer audioUrl={outputUrl} label="OUTPUT PREVIEW" showDownload />
+                    <AudioPlayer audioUrl={outputUrl} label="OUTPUT PREVIEW" showDownload channelId={selectedVoice?.channel_id} />
                 </div>
 
                 {/* Right Column — Settings */}

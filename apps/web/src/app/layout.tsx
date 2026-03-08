@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
+import QueryProvider from "@/lib/query-provider";
 
 export const metadata: Metadata = {
   title: "Resound Studio — AI Voice Studio",
@@ -30,33 +31,35 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased" suppressHydrationWarning>
-        {/* Ambient background orbs */}
-        <div className="ambient-orb ambient-orb-1" />
-        <div className="ambient-orb ambient-orb-2" />
-        <div className="ambient-orb ambient-orb-3" />
+        <QueryProvider>
+          {/* Ambient background orbs */}
+          <div className="ambient-orb ambient-orb-1" />
+          <div className="ambient-orb ambient-orb-2" />
+          <div className="ambient-orb ambient-orb-3" />
 
-        <div
-          style={{
-            display: "flex",
-            minHeight: "100vh",
-            position: "relative",
-            zIndex: 1,
-          }}
-        >
-          <Sidebar />
-          <main
+          <div
             style={{
-              flex: 1,
-              marginLeft: "var(--sidebar-width)",
-              padding: "32px 40px 60px",
-              maxWidth: "calc(100vw - var(--sidebar-width))",
-              overflowY: "auto",
-              transition: "margin-left 0.3s ease",
+              display: "flex",
+              minHeight: "100vh",
+              position: "relative",
+              zIndex: 1,
             }}
           >
-            {children}
-          </main>
-        </div>
+            <Sidebar />
+            <main
+              style={{
+                flex: 1,
+                marginLeft: "var(--sidebar-width)",
+                padding: "32px 40px 60px",
+                maxWidth: "calc(100vw - var(--sidebar-width))",
+                overflowY: "auto",
+                transition: "margin-left 0.3s ease",
+              }}
+            >
+              {children}
+            </main>
+          </div>
+        </QueryProvider>
       </body>
     </html>
   );

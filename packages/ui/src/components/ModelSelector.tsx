@@ -10,6 +10,10 @@ import type { ModelInfo, ModelProgressEvent } from "@resound-studio/shared";
 import { CAP_STYLE, PHASE_COLORS } from "@resound-studio/shared";
 import { getModels, getModelLoadStreamUrl } from "@resound-studio/api";
 
+interface ModelSelectorProps {
+    onEngineUpdate?: (modelId: string, capabilities: string[]) => void;
+}
+
 function getVramColor(estimate: string): string {
     const num = parseFloat(estimate);
     if (num <= 2) return "#22c55e";
@@ -123,7 +127,7 @@ function LoadingProgressBar({ progress }: { progress: ModelProgressEvent }) {
 /* ═══════════════════════════════════ */
 /*  ModelSelector Main Component      */
 /* ═══════════════════════════════════ */
-export default function ModelSelector() {
+export function ModelSelector({ onEngineUpdate }: ModelSelectorProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [models, setModels] = useState<Record<string, ModelInfo>>({});
     const [activeModelId, setActiveModelId] = useState<string | null>(null);
@@ -135,8 +139,11 @@ export default function ModelSelector() {
             const data = await getModels();
             setModels(data.models);
             setActiveModelId(data.active);
+            if (data.active && data.models[data.active] && onEngineUpdate) {
+                onEngineUpdate(data.active, data.models[data.active].capabilities);
+            }
         } catch (e) { console.error("Failed to fetch models", e); }
-    }, []);
+    }, [onEngineUpdate]);
 
     useEffect(() => { fetchModels(); }, [fetchModels]);
 
@@ -154,6 +161,9 @@ export default function ModelSelector() {
                 setLoadProgress(data);
                 if (data.phase === "ready") {
                     setActiveModelId(data.model_id);
+                    if (models[data.model_id] && onEngineUpdate) {
+                        onEngineUpdate(data.model_id, models[data.model_id].capabilities);
+                    }
                     eventSource.close();
                     setTimeout(() => {
                         setIsLoading(false);
@@ -215,6 +225,11 @@ export default function ModelSelector() {
                         <div style={{ fontSize: "0.85rem", fontWeight: 900, textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {isLoading ? "LOADING..." : activeModel?.name || "NONE"}
                         </div>
+                        {activeModel && !isLoading && (
+                            <div style={{ fontSize: "0.6rem", fontWeight: 800, color: "var(--text-muted)", marginTop: "2px" }}>
+                                VRAM: {activeModel.vram_estimate}
+                            </div>
+                        )}
                     </div>
                     <ChevronDown size={14} color="#000" strokeWidth={3} />
                 </button>

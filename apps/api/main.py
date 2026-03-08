@@ -6,6 +6,8 @@ Main server exposing REST API endpoints for:
   - Voice design (text description → embedding → save)
   - TTS generation (text + voice + settings → audio)
   - Voice management (list, delete, preview)
+  - Generation history (list, replay, delete)
+  - Voice profiles (CRUD, multi-sample support)
 
 Run with:
   uvicorn main:app --reload --port 8000
@@ -23,21 +25,35 @@ from contextlib import asynccontextmanager
 
 import numpy as np
 import soundfile as sf
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
+from fastapi import FastAPI, Depends, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, FileResponse, StreamingResponse, JSONResponse
-from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+from sqlalchemy.orm import Session
 
-from engine_manager import get_manager
-from voice_store import (
-    save_voice,
-    get_all_voices,
-    get_voice,
-    get_voice_embedding_path,
-    get_voice_sample_path,
-    delete_voice as store_delete_voice,
+# ---- New modular imports ----
+from database import init_db, get_db
+import profiles as profiles_module
+import history as history_module
+import stories as stories_module
+import channels as channels_module
+from schemas import (
+    GenerateRequest, DesignVoiceRequest, PreviewRequest,
+    LoadModelRequest, FoleyRequest, DubbingRequest, PodcastRequest,
+    StreamGenerateRequest, AsyncGenerateRequest,
+    BatchItem, BatchGenerateRequest,
+    ConversationRequest, AudiobookRequest,
+    EmotionSegment, EmotionTimelineRequest,
+    CompareRequest, ConvertRequest, SrtRequest,
+    VoiceProfileCreate, VoiceProfileUpdate,
+    PreviewDesignVoiceRequest, PodcastTimelineRequest,
+    HistoryFilters,
+    StoryCreate, StoryItemCreate, StoryItemMove, StoryItemTrim, 
+    StoryResponse, StoryItemResponse,
 )
+
+# ---- Legacy imports (engine & utilities — kept as-is) ----
+from engine_manager import get_manager
 from utils.audio_utils import master_audio, sanitize_reference_audio
 from utils.text_chunker import chunk_text
 from utils.audio_cache import get_cached, put_cached, clear_cache as clear_audio_cache, get_cache_stats
@@ -72,6 +88,20 @@ async def lifespan(app: FastAPI):
     logger.info("  Resound Studio API Server Starting")
     logger.info("  Multi-Model Architecture v2.0")
     logger.info("=" * 60)
+
+    # ---- Initialize database ----
+    init_db()
+    logger.info("Database initialized (SQLite + SQLAlchemy)")
+
+    # ---- Migrate legacy flat-file voices into the DB ----
+    try:
+        db = next(get_db())
+        migrated = profiles_module.migrate_from_voice_store(db)
+        if migrated > 0:
+            logger.info(f"Migrated {migrated} legacy voices into database")
+        db.close()
+    except Exception as e:
+        logger.warning(f"Legacy migration skipped: {e}")
     
     # Enable automatic CuDNN optimizations for generation algorithms
     try:
@@ -119,29 +149,41 @@ if API_KEY:
 else:
     logger.info("API Key authentication DISABLED (set RESOUND_API_KEY to enable)")
 
+# Register Modular Routers
+app.include_router(channels_module.router)
 
 
-# ---- Models ----
-class GenerateRequest(BaseModel):
-    text: str
-    voiceId: str
-    language: str = "English"
-    emotion: str = "neutral"
-    speed: float = 1.0
-    pitch: float = 1.0
-    duration: Optional[float] = None
-    style: Optional[str] = None
 
+# ---- Models are now imported from schemas.py ----
 
-class DesignVoiceRequest(BaseModel):
-    description: str
-    name: str
-    language: str = "English"
+# ---- Backward-compatible helper for routes that don't yet take db: Session ----
+# These wrap the profiles_module to work without explicit DI for background threads.
+def _get_voice_compat(voice_id: str):
+    """Backward-compat wrapper: get voice profile using a transient session."""
+    from database import get_session
+    db = get_session()
+    try:
+        return profiles_module.get_profile(voice_id, db)
+    finally:
+        db.close()
 
+def _get_embedding_path_compat(voice_id: str):
+    """Backward-compat wrapper: get embedding path using a transient session."""
+    from database import get_session
+    db = get_session()
+    try:
+        return profiles_module.get_profile_embedding_path(voice_id, db)
+    finally:
+        db.close()
 
-class PreviewRequest(BaseModel):
-    voiceId: str
-    text: str = "Hello, this is a preview of my voice."
+def _get_sample_path_compat(voice_id: str):
+    """Backward-compat wrapper: get sample path using a transient session."""
+    from database import get_session
+    db = get_session()
+    try:
+        return profiles_module.get_profile_sample_path(voice_id, db)
+    finally:
+        db.close()
 
 
 # ---- Health ----
@@ -173,8 +215,7 @@ async def list_models():
         "models": models
     }
 
-class LoadModelRequest(BaseModel):
-    model_id: str
+# LoadModelRequest imported from schemas.py
 
 @app.post("/api/models/load")
 async def load_model_endpoint(req: LoadModelRequest):
@@ -248,6 +289,7 @@ async def clone_voice(
     description: str = Form(""),
     language: str = Form("English"),
     tags: str = Form("[]"),
+    db: Session = Depends(get_db),
 ):
     """Clone a voice from an uploaded audio sample."""
     logger.info(f"Cloning voice: {name} (file: {audio.filename})")
@@ -272,26 +314,47 @@ async def clone_voice(
     except json.JSONDecodeError:
         tag_list = []
 
-    # Save voice
-    voice = save_voice(
+    # Create profile in database
+    profile_data = VoiceProfileCreate(
         name=name,
         description=description,
         language=language,
         tags=tag_list,
-        embedding_data=embedding_bytes,
-        audio_sample=audio_bytes,
+    )
+    profile = profiles_module.create_profile(
+        data=profile_data,
         engine_id=manager.active_model_id or "unknown",
+        db=db,
     )
 
-    logger.info(f"Voice cloned successfully: {voice['id']}")
-    return voice
+    # Add the audio sample to the profile
+    duration = None
+    try:
+        data_arr, sr = sf.read(io.BytesIO(audio_bytes))
+        duration = len(data_arr) / sr
+    except Exception:
+        pass
+
+    profiles_module.add_sample(
+        profile_id=profile.id,
+        audio_bytes=audio_bytes,
+        embedding_bytes=embedding_bytes,
+        reference_text="",
+        duration_seconds=duration,
+        is_primary=True,
+        db=db,
+    )
+
+    result = profiles_module._profile_to_dict(profile, sample_count=1)
+    logger.info(f"Voice cloned successfully: {profile.id}")
+    return result
 
 
 # ==============================
 # Voice Design
 # ==============================
 @app.post("/api/design-voice")
-async def design_voice(req: DesignVoiceRequest):
+async def design_voice(req: DesignVoiceRequest, db: Session = Depends(get_db)):
     """Create a new voice from a text description."""
     logger.info(f"Designing voice: {req.name}")
 
@@ -309,34 +372,67 @@ async def design_voice(req: DesignVoiceRequest):
     clone_result = engine.clone_voice(design_audio)
     embedding_bytes = clone_result["prompt_bytes"]
 
-    voice = save_voice(
+    # Create profile in database
+    profile_data = VoiceProfileCreate(
         name=req.name,
         description=req.description,
         language=req.language,
         tags=["designed"],
-        embedding_data=embedding_bytes,
-        audio_sample=design_audio,
+        channel_id=req.channel_id,
+    )
+    profile = profiles_module.create_profile(
+        data=profile_data,
         engine_id=manager.active_model_id or "unknown",
+        db=db,
     )
 
-    logger.info(f"Voice designed successfully: {voice['id']}")
-    return voice
+    # Add the designed audio as a sample
+    profiles_module.add_sample(
+        profile_id=profile.id,
+        audio_bytes=design_audio,
+        embedding_bytes=embedding_bytes,
+        reference_text=req.description,
+        duration_seconds=None,
+        is_primary=True,
+        db=db,
+    )
+
+    result = profiles_module._profile_to_dict(profile, sample_count=1)
+    logger.info(f"Voice designed successfully: {profile.id}")
+    return result
+
+
+@app.post("/api/design-voice/preview")
+async def preview_design_voice(req: PreviewDesignVoiceRequest):
+    """Generate an ephemeral voice preview from a text description without saving."""
+    logger.info("Generating voice design preview...")
+
+    manager = get_manager()
+    engine = manager.get_current_engine()
+
+    design_audio = engine.design_voice(
+        description=req.description,
+        text=req.text,
+        language=req.language,
+    )
+
+    return Response(content=design_audio, media_type="audio/wav")
 
 
 # ==============================
 # TTS Generation
 # ==============================
 @app.post("/api/generate")
-async def generate_speech(req: GenerateRequest):
+async def generate_speech(req: GenerateRequest, db: Session = Depends(get_db)):
     """Generate speech audio from text using a saved voice."""
     logger.info(f"Generating speech: voice={req.voiceId}, lang={req.language}, emotion={req.emotion}")
 
-    # Validate voice exists
-    voice = get_voice(req.voiceId)
-    if not voice:
+    # Validate voice exists (check new DB first, then legacy)
+    profile = profiles_module.get_profile(req.voiceId, db)
+    if not profile:
         raise HTTPException(404, f"Voice not found: {req.voiceId}")
 
-    embedding_path = get_voice_embedding_path(req.voiceId)
+    embedding_path = profiles_module.get_profile_embedding_path(req.voiceId, db)
     if not embedding_path:
         raise HTTPException(404, f"Voice embedding not found: {req.voiceId}")
 
@@ -349,7 +445,7 @@ async def generate_speech(req: GenerateRequest):
 
     # Warn if voice was cloned with a different engine
     manager = get_manager()
-    cloned_with = voice.get("clonedWithEngine", "unknown")
+    cloned_with = profile.engine_id or "unknown"
     if cloned_with != "unknown" and cloned_with != manager.active_model_id:
         logger.warning(
             f"Voice '{req.voiceId}' was cloned with '{cloned_with}' but current engine is '{manager.active_model_id}'. "
@@ -428,6 +524,23 @@ async def generate_speech(req: GenerateRequest):
     # ── Cache store ──
     put_cached(audio_bytes, req.text, req.voiceId, **cache_settings)
 
+    # ── Record in generation history ──
+    try:
+        history_module.record_generation(
+            profile_id=req.voiceId,
+            text=req.text,
+            audio_bytes=audio_bytes,
+            language=req.language,
+            emotion=req.emotion,
+            speed=req.speed,
+            pitch=req.pitch,
+            style=req.style,
+            engine_id=manager.active_model_id or "unknown",
+            db=db,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to record generation in history: {e}")
+
     logger.info(f"Speech generated and mastered: {len(audio_bytes)} bytes")
     return Response(
         content=audio_bytes,
@@ -440,13 +553,13 @@ async def generate_speech(req: GenerateRequest):
 # Voice Preview
 # ==============================
 @app.post("/api/preview")
-async def preview_voice(req: PreviewRequest):
+async def preview_voice(req: PreviewRequest, db: Session = Depends(get_db)):
     """Generate a short preview of a voice."""
-    voice = get_voice(req.voiceId)
-    if not voice:
+    profile = profiles_module.get_profile(req.voiceId, db)
+    if not profile:
         raise HTTPException(404, f"Voice not found: {req.voiceId}")
 
-    embedding_path = get_voice_embedding_path(req.voiceId)
+    embedding_path = profiles_module.get_profile_embedding_path(req.voiceId, db)
     if not embedding_path:
         raise HTTPException(404, f"Voice embedding not found: {req.voiceId}")
 
@@ -455,7 +568,7 @@ async def preview_voice(req: PreviewRequest):
     audio_bytes = engine.generate_speech(
         text=req.text,
         embedding_path=embedding_path,
-        language=voice.get("language", "English"),
+        language=profile.language or "English",
     )
 
     return Response(content=audio_bytes, media_type="audio/wav")
@@ -465,24 +578,27 @@ async def preview_voice(req: PreviewRequest):
 # Voice Management
 # ==============================
 @app.get("/api/voices")
-async def list_voices():
+async def list_voices(db: Session = Depends(get_db)):
     """List all saved voices."""
-    return get_all_voices()
+    return profiles_module.list_profiles(db)
 
 
 @app.get("/api/voices/{voice_id}")
-async def get_voice_details(voice_id: str):
+async def get_voice_details(voice_id: str, db: Session = Depends(get_db)):
     """Get details of a specific voice."""
-    voice = get_voice(voice_id)
-    if not voice:
+    profile = profiles_module.get_profile(voice_id, db)
+    if not profile:
         raise HTTPException(404, f"Voice not found: {voice_id}")
-    return voice
+    from sqlalchemy import func as sqlfunc
+    from database import ProfileSample
+    sample_count = db.query(sqlfunc.count(ProfileSample.id)).filter(ProfileSample.profile_id == voice_id).scalar()
+    return profiles_module._profile_to_dict(profile, sample_count)
 
 
 @app.delete("/api/voices/{voice_id}")
-async def remove_voice(voice_id: str):
+async def remove_voice(voice_id: str, db: Session = Depends(get_db)):
     """Delete a saved voice."""
-    success = store_delete_voice(voice_id)
+    success = profiles_module.delete_profile(voice_id, db)
     if not success:
         raise HTTPException(404, f"Voice not found: {voice_id}")
     logger.info(f"Voice deleted: {voice_id}")
@@ -490,19 +606,158 @@ async def remove_voice(voice_id: str):
 
 
 @app.get("/api/voices/{voice_id}/sample")
-async def get_voice_sample(voice_id: str):
+async def get_voice_sample(voice_id: str, db: Session = Depends(get_db)):
     """Get the original audio sample for a cloned voice."""
-    sample_path = get_voice_sample_path(voice_id)
+    sample_path = profiles_module.get_profile_sample_path(voice_id, db)
     if not sample_path:
         raise HTTPException(404, "No audio sample available for this voice")
     return FileResponse(sample_path, media_type="audio/wav")
 
 
+# ============================================
+# VOICE PROFILE SAMPLES (NEW — Multi-sample support)
+# ============================================
+
+@app.post("/api/voices/{voice_id}/samples")
+async def add_voice_sample(
+    voice_id: str,
+    audio: UploadFile = File(...),
+    reference_text: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Add an additional audio sample to a voice profile."""
+    profile = profiles_module.get_profile(voice_id, db)
+    if not profile:
+        raise HTTPException(404, f"Voice not found: {voice_id}")
+
+    audio_bytes = await audio.read()
+    if len(audio_bytes) == 0:
+        raise HTTPException(400, "Empty audio file")
+
+    audio_bytes = sanitize_reference_audio(audio_bytes)
+
+    # Clone to get embedding
+    manager = get_manager()
+    engine = manager.get_current_engine()
+    clone_result = engine.clone_voice(audio_bytes)
+    embedding_bytes = clone_result["prompt_bytes"]
+
+    duration = None
+    try:
+        data_arr, sr = sf.read(io.BytesIO(audio_bytes))
+        duration = len(data_arr) / sr
+    except Exception:
+        pass
+
+    sample = profiles_module.add_sample(
+        profile_id=voice_id,
+        audio_bytes=audio_bytes,
+        embedding_bytes=embedding_bytes,
+        reference_text=reference_text,
+        duration_seconds=duration,
+        is_primary=False,
+        db=db,
+    )
+    return {"id": sample.id, "profile_id": voice_id, "duration": duration}
+
+
+@app.get("/api/voices/{voice_id}/samples")
+async def list_voice_samples(voice_id: str, db: Session = Depends(get_db)):
+    """List all audio samples for a voice profile."""
+    profile = profiles_module.get_profile(voice_id, db)
+    if not profile:
+        raise HTTPException(404, f"Voice not found: {voice_id}")
+    samples = profiles_module.get_samples(voice_id, db)
+    return [
+        {
+            "id": s.id,
+            "profile_id": s.profile_id,
+            "reference_text": s.reference_text,
+            "duration_seconds": s.duration_seconds,
+            "is_primary": s.is_primary,
+            "audio_url": f"/api/voices/{voice_id}/samples/{s.id}/audio",
+            "createdAt": s.created_at.isoformat() + "Z" if s.created_at else None,
+        }
+        for s in samples
+    ]
+
+
+@app.get("/api/voices/{voice_id}/samples/{sample_id}/audio")
+async def get_sample_audio(voice_id: str, sample_id: str, db: Session = Depends(get_db)):
+    """Get audio for a specific sample."""
+    from database import ProfileSample
+    sample = db.query(ProfileSample).filter(
+        ProfileSample.id == sample_id,
+        ProfileSample.profile_id == voice_id,
+    ).first()
+    if not sample or not sample.audio_path or not os.path.exists(sample.audio_path):
+        raise HTTPException(404, "Sample audio not found")
+    return FileResponse(sample.audio_path, media_type="audio/wav")
+
+
+@app.delete("/api/voices/{voice_id}/samples/{sample_id}")
+async def delete_voice_sample(voice_id: str, sample_id: str, db: Session = Depends(get_db)):
+    """Delete a specific audio sample from a profile."""
+    success = profiles_module.delete_sample(sample_id, db)
+    if not success:
+        raise HTTPException(404, "Sample not found")
+    return {"status": "deleted", "id": sample_id}
+
+
+# ============================================
+# GENERATION HISTORY (NEW)
+# ============================================
+
+@app.get("/api/history")
+async def get_history(
+    profile_id: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+):
+    """Get generation history with optional filtering."""
+    return history_module.list_generations(
+        db=db,
+        profile_id=profile_id,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/api/history/{gen_id}/audio")
+async def get_history_audio(gen_id: str, db: Session = Depends(get_db)):
+    """Get audio for a historical generation."""
+    gen = history_module.get_generation(gen_id, db)
+    if not gen or not gen.audio_path or not os.path.exists(gen.audio_path):
+        raise HTTPException(404, "Generation audio not found")
+    return FileResponse(gen.audio_path, media_type="audio/wav")
+
+
+@app.delete("/api/history/{gen_id}")
+async def delete_history_item(gen_id: str, db: Session = Depends(get_db)):
+    """Delete a generation from history."""
+    success = history_module.delete_generation(gen_id, db)
+    if not success:
+        raise HTTPException(404, "Generation not found")
+    return {"status": "deleted", "id": gen_id}
+
+
+@app.delete("/api/history")
+async def clear_all_history(
+    profile_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Clear generation history."""
+    count = history_module.clear_history(db, profile_id)
+    return {"status": "cleared", "deleted_count": count}
+
+
 # ==============================
 # Foley / Sound Effects
 # ==============================
-class FoleyRequest(BaseModel):
-    description: str
+# FoleyRequest imported from schemas.py
 
 @app.post("/api/foley")
 async def generate_foley(req: FoleyRequest):
@@ -527,14 +782,10 @@ async def generate_foley(req: FoleyRequest):
 # ==============================
 # Cross-Lingual Voice Dubbing
 # ==============================
-class DubbingRequest(BaseModel):
-    text: str
-    voiceId: str
-    sourceLang: str = "English"
-    targetLang: str = "Hindi"
+# DubbingRequest imported from schemas.py
 
 @app.post("/api/dubbing")
-async def cross_lingual_dub(req: DubbingRequest):
+async def cross_lingual_dub(req: DubbingRequest, db: Session = Depends(get_db)):
     """Clone voice and generate speech in a different language."""
     logger.info(f"Dubbing: {req.voiceId} from {req.sourceLang} to {req.targetLang}")
 
@@ -548,11 +799,11 @@ async def cross_lingual_dub(req: DubbingRequest):
             f"The currently loaded model ({manager.active_model_id}) does not support cross-lingual dubbing. Switch to CosyVoice or XTTS v2."
         )
 
-    voice = get_voice(req.voiceId)
-    if not voice:
+    profile = profiles_module.get_profile(req.voiceId, db)
+    if not profile:
         raise HTTPException(404, f"Voice not found: {req.voiceId}")
 
-    sample_path = get_voice_sample_path(req.voiceId)
+    sample_path = profiles_module.get_profile_sample_path(req.voiceId, db)
     if not sample_path:
         raise HTTPException(404, "No audio sample available for dubbing")
 
@@ -573,20 +824,16 @@ async def cross_lingual_dub(req: DubbingRequest):
 # ==============================
 # Podcast Auto-Generation
 # ==============================
-class PodcastRequest(BaseModel):
-    script: str
-    voiceIdA: str
-    voiceIdB: str
-    language: str = "English"
+# PodcastRequest imported from schemas.py
 
 @app.post("/api/podcast")
-async def generate_podcast(req: PodcastRequest):
+async def generate_podcast(req: PodcastRequest, db: Session = Depends(get_db)):
     """Generate a multi-speaker podcast from a script. Works with ALL engines."""
     logger.info("Generating podcast...")
 
     # Validate both voices
-    emb_a = get_voice_embedding_path(req.voiceIdA)
-    emb_b = get_voice_embedding_path(req.voiceIdB)
+    emb_a = profiles_module.get_profile_embedding_path(req.voiceIdA, db)
+    emb_b = profiles_module.get_profile_embedding_path(req.voiceIdB, db)
     if not emb_a:
         raise HTTPException(404, f"Speaker A voice not found: {req.voiceIdA}")
     if not emb_b:
@@ -685,24 +932,17 @@ async def audio_inpaint(
 # ==============================
 # Streaming Generation (#2)
 # ==============================
-class StreamGenerateRequest(BaseModel):
-    text: str
-    voiceId: str
-    language: str = "English"
-    emotion: str = "neutral"
-    speed: float = 1.0
-    pitch: float = 1.0
-    style: Optional[str] = None
+# StreamGenerateRequest imported from schemas.py
 
 
 @app.post("/api/generate/stream")
-async def generate_speech_stream(req: StreamGenerateRequest):
+async def generate_speech_stream(req: StreamGenerateRequest, db: Session = Depends(get_db)):
     """Stream audio chunks as they're generated via SSE (Server-Sent Events)."""
-    voice = get_voice(req.voiceId)
-    if not voice:
+    profile = profiles_module.get_profile(req.voiceId, db)
+    if not profile:
         raise HTTPException(404, f"Voice not found: {req.voiceId}")
 
-    embedding_path = get_voice_embedding_path(req.voiceId)
+    embedding_path = profiles_module.get_profile_embedding_path(req.voiceId, db)
     if not embedding_path:
         raise HTTPException(404, f"Voice embedding not found: {req.voiceId}")
 
@@ -744,14 +984,7 @@ _jobs: Dict[str, Dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
 
 
-class AsyncGenerateRequest(BaseModel):
-    text: str
-    voiceId: str
-    language: str = "English"
-    emotion: str = "neutral"
-    speed: float = 1.0
-    pitch: float = 1.0
-    style: Optional[str] = None
+# AsyncGenerateRequest imported from schemas.py
 
 
 def _run_async_job(job_id: str, req_data: dict):
@@ -761,7 +994,7 @@ def _run_async_job(job_id: str, req_data: dict):
             _jobs[job_id]["status"] = "processing"
             _jobs[job_id]["started_at"] = time.time()
 
-        embedding_path = get_voice_embedding_path(req_data["voiceId"])
+        embedding_path = _get_embedding_path_compat(req_data["voiceId"])
         if not embedding_path:
             raise RuntimeError(f"Voice embedding not found: {req_data['voiceId']}")
 
@@ -834,7 +1067,7 @@ def _run_async_job(job_id: str, req_data: dict):
 @app.post("/api/generate/async")
 async def generate_speech_async(req: AsyncGenerateRequest):
     """Submit a TTS job for async processing. Returns a job ID to poll."""
-    voice = get_voice(req.voiceId)
+    voice = _get_voice_compat(req.voiceId)
     if not voice:
         raise HTTPException(404, f"Voice not found: {req.voiceId}")
 
@@ -886,29 +1119,17 @@ async def get_job_result(job_id: str):
                         headers={"Content-Disposition": f"attachment; filename={job_id}.wav"})
 
 
-# ==============================
-# Batch Generation (#7)
-# ==============================
-class BatchItem(BaseModel):
-    text: str
-    language: str = "English"
-    emotion: str = "neutral"
-    speed: float = 1.0
-
-
-class BatchGenerateRequest(BaseModel):
-    voiceId: str
-    items: List[BatchItem]
+# BatchItem and BatchGenerateRequest imported from schemas.py
 
 
 @app.post("/api/generate/batch")
-async def generate_batch(req: BatchGenerateRequest):
+async def generate_batch(req: BatchGenerateRequest, db: Session = Depends(get_db)):
     """Generate multiple texts in a single request."""
-    voice = get_voice(req.voiceId)
-    if not voice:
+    profile = profiles_module.get_profile(req.voiceId, db)
+    if not profile:
         raise HTTPException(404, f"Voice not found: {req.voiceId}")
 
-    embedding_path = get_voice_embedding_path(req.voiceId)
+    embedding_path = profiles_module.get_profile_embedding_path(req.voiceId, db)
     if not embedding_path:
         raise HTTPException(404, f"Voice embedding not found: {req.voiceId}")
 
@@ -1088,22 +1309,18 @@ async def global_exception_handler(request: Request, exc: Exception):
 # ==============================
 # #3 — Multi-Speaker Conversation
 # ==============================
-class ConversationRequest(BaseModel):
-    script: str
-    voices: Dict[str, str]  # {"A": "voice-id-1", "B": "voice-id-2", "C": "voice-id-3"}
-    language: str = "English"
-    gap: float = 0.3  # seconds between speakers
+# ConversationRequest imported from schemas.py
 
 
 @app.post("/api/conversation")
-async def generate_conversation(req: ConversationRequest):
+async def generate_conversation(req: ConversationRequest, db: Session = Depends(get_db)):
     """Generate a multi-speaker conversation from a labeled script."""
     logger.info(f"Multi-speaker conversation: {len(req.voices)} speakers")
 
     # Validate all voices exist and build embedding map
     voice_map = {}
     for label, voice_id in req.voices.items():
-        embedding = get_voice_embedding_path(voice_id)
+        embedding = profiles_module.get_profile_embedding_path(voice_id, db)
         if not embedding:
             raise HTTPException(404, f"Voice not found for speaker '{label}': {voice_id}")
         voice_map[label] = embedding
@@ -1137,26 +1354,21 @@ async def generate_conversation(req: ConversationRequest):
 # ==============================
 # #4 — Audiobook Generator
 # ==============================
-class AudiobookRequest(BaseModel):
-    text: str
-    narratorVoiceId: str
-    dialogueVoiceId: Optional[str] = None  # optional different voice for dialogue
-    language: str = "English"
-    title: str = "Audiobook"
+# AudiobookRequest imported from schemas.py
 
 
 @app.post("/api/audiobook")
-async def generate_audiobook(req: AudiobookRequest):
+async def generate_audiobook(req: AudiobookRequest, db: Session = Depends(get_db)):
     """Generate a full audiobook from text with chapter detection and dialogue voices."""
     logger.info(f"Audiobook generation: '{req.title}'")
 
-    narrator_embedding = get_voice_embedding_path(req.narratorVoiceId)
+    narrator_embedding = profiles_module.get_profile_embedding_path(req.narratorVoiceId, db)
     if not narrator_embedding:
         raise HTTPException(404, f"Narrator voice not found: {req.narratorVoiceId}")
 
     dialogue_embedding = narrator_embedding
     if req.dialogueVoiceId:
-        dialogue_embedding = get_voice_embedding_path(req.dialogueVoiceId) or narrator_embedding
+        dialogue_embedding = profiles_module.get_profile_embedding_path(req.dialogueVoiceId, db) or narrator_embedding
 
     manager = get_manager()
     engine = manager.get_current_engine()
@@ -1218,14 +1430,14 @@ VOICES_DIR = os.path.join(os.path.dirname(__file__), "data", "voices")
 
 
 @app.get("/api/voices/{voice_id}/export")
-async def export_voice_endpoint(voice_id: str):
+async def export_voice_endpoint(voice_id: str, db: Session = Depends(get_db)):
     """Export a voice as a downloadable .resound file."""
-    voice = get_voice(voice_id)
-    if not voice:
+    profile = profiles_module.get_profile(voice_id, db)
+    if not profile:
         raise HTTPException(404, f"Voice not found: {voice_id}")
 
     try:
-        resound_bytes = export_voice(voice_id, VOICES_DIR)
+        resound_bytes = export_voice(voice_id, db)
         return Response(
             content=resound_bytes,
             media_type="application/zip",
@@ -1236,7 +1448,7 @@ async def export_voice_endpoint(voice_id: str):
 
 
 @app.post("/api/voices/import")
-async def import_voice_endpoint(file: UploadFile = File(...)):
+async def import_voice_endpoint(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """Import a .resound file to add a voice."""
     if not file.filename.endswith(".resound"):
         raise HTTPException(400, "File must have .resound extension")
@@ -1246,9 +1458,9 @@ async def import_voice_endpoint(file: UploadFile = File(...)):
         raise HTTPException(400, "Empty file")
 
     try:
-        meta = import_voice(file_bytes, VOICES_DIR)
+        meta = import_voice(file_bytes, db, VOICES_DIR)
         logger.info(f"Voice imported: {meta['id']} (name: {meta.get('name', 'unknown')})")
-        return meta
+        return JSONResponse(status_code=201, content=meta)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -1256,20 +1468,17 @@ async def import_voice_endpoint(file: UploadFile = File(...)):
 # ==============================
 # #6 — Subtitle/SRT Generator
 # ==============================
-class SrtRequest(BaseModel):
-    text: str
-    voiceId: str
-    language: str = "English"
+# SrtRequest imported from schemas.py
 
 
 @app.post("/api/generate/srt")
-async def generate_with_srt(req: SrtRequest):
+async def generate_with_srt(req: SrtRequest, db: Session = Depends(get_db)):
     """Generate audio AND matching SRT subtitle file."""
-    voice = get_voice(req.voiceId)
-    if not voice:
+    profile = profiles_module.get_profile(req.voiceId, db)
+    if not profile:
         raise HTTPException(404, f"Voice not found: {req.voiceId}")
 
-    embedding_path = get_voice_embedding_path(req.voiceId)
+    embedding_path = profiles_module.get_profile_embedding_path(req.voiceId, db)
     if not embedding_path:
         raise HTTPException(404, f"Voice embedding not found: {req.voiceId}")
 
@@ -1335,26 +1544,17 @@ async def mix_music(
 # ==============================
 # #8 — Emotion Timeline
 # ==============================
-class EmotionSegment(BaseModel):
-    text: str
-    emotion: str = "neutral"
-
-
-class EmotionTimelineRequest(BaseModel):
-    voiceId: str
-    segments: List[EmotionSegment]
-    language: str = "English"
-    speed: float = 1.0
+# EmotionSegment and EmotionTimelineRequest imported from schemas.py
 
 
 @app.post("/api/generate/emotion-timeline")
-async def generate_emotion_timeline(req: EmotionTimelineRequest):
+async def generate_emotion_timeline(req: EmotionTimelineRequest, db: Session = Depends(get_db)):
     """Generate speech with different emotions per sentence."""
-    voice = get_voice(req.voiceId)
-    if not voice:
+    profile = profiles_module.get_profile(req.voiceId, db)
+    if not profile:
         raise HTTPException(404, f"Voice not found: {req.voiceId}")
 
-    embedding_path = get_voice_embedding_path(req.voiceId)
+    embedding_path = profiles_module.get_profile_embedding_path(req.voiceId, db)
     if not embedding_path:
         raise HTTPException(404, f"Voice embedding not found: {req.voiceId}")
 
@@ -1400,25 +1600,21 @@ async def generate_emotion_timeline(req: EmotionTimelineRequest):
 # ==============================
 # #9 — A/B Voice Comparison
 # ==============================
-class CompareRequest(BaseModel):
-    text: str
-    voiceIdA: str
-    voiceIdB: str
-    language: str = "English"
+# CompareRequest imported from schemas.py
 
 
 @app.post("/api/compare")
-async def compare_voices(req: CompareRequest):
+async def compare_voices(req: CompareRequest, db: Session = Depends(get_db)):
     """Generate the same text with two different voices for comparison."""
     import base64
 
     for label, vid in [("A", req.voiceIdA), ("B", req.voiceIdB)]:
-        v = get_voice(vid)
+        v = profiles_module.get_profile(vid, db)
         if not v:
             raise HTTPException(404, f"Voice {label} not found: {vid}")
 
-    emb_a = get_voice_embedding_path(req.voiceIdA)
-    emb_b = get_voice_embedding_path(req.voiceIdB)
+    emb_a = profiles_module.get_profile_embedding_path(req.voiceIdA, db)
+    emb_b = profiles_module.get_profile_embedding_path(req.voiceIdB, db)
 
     manager = get_manager()
     engine = manager.get_current_engine()
@@ -1441,21 +1637,17 @@ async def compare_voices(req: CompareRequest):
 # ==============================
 # #12 — Export Format Conversion
 # ==============================
-class ConvertRequest(BaseModel):
-    text: str
-    voiceId: str
-    language: str = "English"
-    format: str = "wav"  # wav, mp3, flac, ogg
+# ConvertRequest imported from schemas.py
 
 
 @app.post("/api/generate/export")
-async def generate_with_format(req: ConvertRequest):
+async def generate_with_format(req: ConvertRequest, db: Session = Depends(get_db)):
     """Generate speech and export in the specified format (WAV, MP3, FLAC, OGG)."""
-    voice = get_voice(req.voiceId)
-    if not voice:
+    profile = profiles_module.get_profile(req.voiceId, db)
+    if not profile:
         raise HTTPException(404, f"Voice not found: {req.voiceId}")
 
-    embedding_path = get_voice_embedding_path(req.voiceId)
+    embedding_path = profiles_module.get_profile_embedding_path(req.voiceId, db)
     if not embedding_path:
         raise HTTPException(404, f"Voice embedding not found: {req.voiceId}")
 
@@ -1521,3 +1713,108 @@ async def voice_fine_tune(
         "Voice Fine-tuning is coming soon. This feature will allow training a custom model "
         "on your voice for dramatically higher quality cloning. Requires significant GPU resources."
     )
+
+
+# ==============================
+# #13 — Stories / Timeline Editor
+# ==============================
+
+@app.get("/api/stories", response_model=List[StoryResponse])
+async def list_stories(db: Session = Depends(get_db)):
+    """List all stories."""
+    return stories_module.get_stories(db)
+
+@app.post("/api/stories", response_model=StoryResponse)
+async def create_story(req: StoryCreate, db: Session = Depends(get_db)):
+    """Create a new story/project."""
+    return stories_module.create_story(db, req)
+
+@app.get("/api/stories/{story_id}", response_model=StoryResponse)
+async def get_story_details(story_id: str, db: Session = Depends(get_db)):
+    """Get story and its timeline items."""
+    return stories_module.get_story(db, story_id)
+
+@app.delete("/api/stories/{story_id}")
+async def delete_story(story_id: str, db: Session = Depends(get_db)):
+    """Delete a story and its items."""
+    stories_module.delete_story(db, story_id)
+    return {"status": "ok"}
+
+@app.post("/api/stories/{story_id}/items", response_model=StoryResponse)
+async def add_story_item(story_id: str, req: StoryItemCreate, db: Session = Depends(get_db)):
+    """Add a generated audio clip to the timeline."""
+    return stories_module.add_item_to_story(db, story_id, req)
+
+@app.put("/api/stories/{story_id}/items/{item_id}/move", response_model=StoryResponse)
+async def move_item(story_id: str, item_id: str, req: StoryItemMove, db: Session = Depends(get_db)):
+    """Move a clip along the timeline or to a different track."""
+    return stories_module.move_story_item(db, story_id, item_id, req)
+
+@app.put("/api/stories/{story_id}/items/{item_id}/trim", response_model=StoryResponse)
+async def trim_item(story_id: str, item_id: str, req: StoryItemTrim, db: Session = Depends(get_db)):
+    """Trim a clip's start or end without destroying the original audio."""
+    return stories_module.trim_story_item(db, story_id, item_id, req)
+
+@app.delete("/api/stories/{story_id}/items/{item_id}", response_model=StoryResponse)
+async def delete_item(story_id: str, item_id: str, db: Session = Depends(get_db)):
+    """Remove a clip from the story timeline."""
+    return stories_module.delete_story_item(db, story_id, item_id)
+
+
+# ==============================
+# Podcast Studio Timeline
+# ==============================
+@app.post("/api/podcast/generate-timeline")
+async def generate_podcast_timeline(req: PodcastTimelineRequest, db: Session = Depends(get_db)):
+    """Generate a multi-speaker podcast and save it as a Timeline Story."""
+    logger.info(f"Generating podcast timeline: {req.story_name}")
+
+    manager = get_manager()
+    engine = manager.get_current_engine()
+
+    # 1. Create a new Story
+    story_data = StoryCreate(name=req.story_name, description="Generated from Podcast Studio")
+    story = stories_module.create_story(db, story_data)
+
+    current_position_ms = 0
+    GAP_MS = 500  # 500ms pause between speakers
+
+    # 2. Iterate through blocks and generate TTS
+    for block in req.blocks:
+        profile = profiles_module.get_profile(db, block.voice_id)
+        if not profile or not profile.samples:
+            raise HTTPException(status_code=404, detail=f"Voice profile not found or has no samples: {block.voice_id}")
+
+        sample = profile.samples[0]
+        prompt_bytes = sample.embedding_bytes or sample.audio_bytes
+
+        # Generate audio
+        audio_bytes = engine.generate(
+            text=block.text,
+            prompt_bytes=prompt_bytes,
+            language=req.language,
+        )
+
+        # Record in history (computes duration)
+        gen = history_module.record_generation(
+            profile_id=profile.id,
+            text=block.text,
+            audio_bytes=audio_bytes,
+            language=req.language,
+            engine_id=manager.active_model_id or "unknown",
+            db=db,
+        )
+
+        # 3. Add to Timeline Story
+        item_data = StoryItemCreate(
+            generation_id=gen.id,
+            position_ms=current_position_ms,
+            track=0
+        )
+        stories_module.add_item_to_story(db, story["id"], item_data)
+
+        # Advance timeline
+        duration_ms = int((gen.duration_seconds or 5.0) * 1000)
+        current_position_ms += duration_ms + GAP_MS
+
+    return {"story_id": story["id"]}
