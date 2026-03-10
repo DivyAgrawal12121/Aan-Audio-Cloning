@@ -21,7 +21,11 @@ import uuid
 import time
 import threading
 import io
+import os
 from contextlib import asynccontextmanager
+
+# Suppress noisy SoX/Audio warnings early
+os.environ["SOX_VERBOSITY"] = "0"
 
 import numpy as np
 import soundfile as sf
@@ -39,23 +43,28 @@ import stories as stories_module
 import channels as channels_module
 from schemas import (
     GenerateRequest, DesignVoiceRequest, PreviewRequest,
-    LoadModelRequest, FoleyRequest, DubbingRequest, PodcastRequest,
+    LoadModelRequest, PodcastTimelineRequest,
     StreamGenerateRequest, AsyncGenerateRequest,
     BatchItem, BatchGenerateRequest,
     ConversationRequest, AudiobookRequest,
     EmotionSegment, EmotionTimelineRequest,
     CompareRequest, ConvertRequest, SrtRequest,
     VoiceProfileCreate, VoiceProfileUpdate,
-    PreviewDesignVoiceRequest, PodcastTimelineRequest,
+    PreviewDesignVoiceRequest, 
     HistoryFilters,
     StoryCreate, StoryItemCreate, StoryItemMove, StoryItemTrim, 
     StoryResponse, StoryItemResponse,
 )
 
 # ---- Legacy imports (engine & utilities — kept as-is) ----
-from engine_manager import get_manager
-from utils.audio_utils import master_audio, sanitize_reference_audio
+from engine_manager import get_manager, detect_accelerators
+from utils.audio_utils import (
+    master_audio, sanitize_reference_audio,
+    validate_reference_audio, normalize_audio, load_audio_bytes,
+)
 from utils.text_chunker import chunk_text
+from utils.voice_prompt_cache import get_prompt_cache
+from utils.progress import get_progress_manager
 from utils.audio_cache import get_cached, put_cached, clear_cache as clear_audio_cache, get_cache_stats
 from utils.features import (
     parse_multi_speaker_script, generate_multi_speaker_audio,
@@ -84,6 +93,7 @@ logger = logging.getLogger("resound-studio")
 # ---- Lifespan ----
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Existing lifespan code...
     logger.info("=" * 60)
     logger.info("  Resound Studio API Server Starting")
     logger.info("  Multi-Model Architecture v2.0")
@@ -121,6 +131,36 @@ async def lifespan(app: FastAPI):
                 )
     except ImportError:
         pass
+
+    # ---- Initialize progress manager with event loop ----
+    try:
+        import asyncio
+        loop = asyncio.get_running_loop()
+        progress_mgr = get_progress_manager()
+        progress_mgr.set_event_loop(loop)
+        logger.info("Progress manager initialized with event loop")
+    except Exception as e:
+        logger.warning(f"Progress manager init: {e}")
+
+    # ---- Detect accelerators ----
+    try:
+        accel = detect_accelerators()
+        rec = accel['recommended']
+        cuda_avail = accel['cuda']['available']
+        
+        logger.info(f"HARDWARE LOG: Recommended={rec}, CUDA={cuda_avail}")
+        
+        if not cuda_avail:
+            # Check if an NVIDIA card is actually present but invisible to torch
+            import subprocess
+            try:
+                smi = subprocess.check_output(["nvidia-smi"], stderr=subprocess.STDOUT)
+                logger.warning("CRITICAL: NVIDIA-SMI detected a GPU, but PyTorch cannot see it! Using CPU fallback.")
+                logger.warning("HINT: You might be using the CPU-only version of torch. Try: pip install torch --index-url https://download.pytorch.org/whl/cu121")
+            except:
+                pass
+    except Exception as e:
+        logger.warning(f"Accelerator detection error: {e}")
         
     yield
     logger.info("Resound Studio API Server Shutting Down")
@@ -128,10 +168,41 @@ async def lifespan(app: FastAPI):
 # ---- App ----
 app = FastAPI(
     title="Resound Studio API",
-    description="AI Voice Cloning & TTS powered by Qwen3-TTS 1.7B",
-    version="1.0.0",
+    description="Multi-Model Zero-Shot Voice Synthesis System",
+    version="2.0.0",
     lifespan=lifespan,
 )
+
+# ---- Global Exception Handler ----
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_msg = str(exc)
+    logger.error(f"GLOBAL ERROR: {error_msg}", exc_info=True)
+    
+    # Check for OOM
+    if "out of memory" in error_msg.lower() or "CUDA out of memory" in error_msg:
+        logger.warning("CRITICAL: GPU OOM detected. Clearing cache and unloading active model...")
+        manager = get_manager()
+        if manager.active_model_id:
+            manager.unload_model(manager.active_model_id)
+            
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except:
+        pass
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "error",
+            "message": "A critical system error occurred.",
+            "detail": error_msg,
+            "code": "INTERNAL_SERVER_ERROR"
+        }
+    )
+
 
 # CORS for Next.js frontend
 app.add_middleware(
@@ -195,11 +266,18 @@ async def root():
 @app.get("/health")
 async def health():
     manager = get_manager()
-    engine = manager.get_current_engine()
+    try:
+        accelerators = manager.get_accelerator_info()
+        device = accelerators.get("recommended", "cpu")
+    except Exception as e:
+        logger.warning(f"Accelerator detection failed: {e}")
+        accelerators = {}
+        device = "cpu"
     return {
         "status": "ok",
         "active_model": manager.active_model_id,
-        "device": engine.device if engine else None,
+        "device": device,
+        "accelerators": accelerators,
     }
 
 # ==============================
@@ -289,30 +367,54 @@ async def clone_voice(
     description: str = Form(""),
     language: str = Form("English"),
     tags: str = Form("[]"),
+    reference_text: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    """Clone a voice from an uploaded audio sample."""
+    """Clone a voice from an uploaded audio sample.
+    
+    Phase 0 improvements:
+      - Validates audio (duration 2-30s, volume, clipping)
+      - Normalizes audio before cloning
+      - Uses reference_text for full phoneme alignment (auto-transcribes if empty)
+    """
     logger.info(f"Cloning voice: {name} (file: {audio.filename})")
 
     # Read audio bytes
     audio_bytes = await audio.read()
     if len(audio_bytes) == 0:
         raise HTTPException(400, "Empty audio file")
+
+    # Phase 0A: Validate reference audio
+    is_valid, error_msg = validate_reference_audio(audio_bytes=audio_bytes)
+    if not is_valid:
+        logger.warning(f"Reference audio validation: {error_msg}")
+        # Don't hard-fail for backward compatibility, but log warning
         
     # Remove background noise to improve clone quality
     audio_bytes = sanitize_reference_audio(audio_bytes)
-
-    # Clone voice using the active manager engine
-    manager = get_manager()
-    engine = manager.get_current_engine()
-    clone_result = engine.clone_voice(audio_bytes)
-    embedding_bytes = clone_result["prompt_bytes"]
 
     # Parse tags
     try:
         tag_list = json.loads(tags) if tags else []
     except json.JSONDecodeError:
         tag_list = []
+
+    manager = get_manager()
+
+    # If it's a designed voice, its pure text description is all we need as the "prompt"
+    if "designed" in tag_list:
+        embedding_bytes = description.encode('utf-8')
+    else:
+        # Clone voice using the active manager engine
+        engine = manager.get_current_engine()
+        
+        # Phase 0B: Pass reference_text for full phoneme alignment
+        clone_result = engine.clone_voice(audio_bytes, ref_text=reference_text)
+        embedding_bytes = clone_result["prompt_bytes"]
+        
+        # Use auto-transcribed text if engine returned it
+        if not reference_text and "reference_text" in clone_result:
+            reference_text = clone_result["reference_text"]
 
     # Create profile in database
     profile_data = VoiceProfileCreate(
@@ -339,7 +441,7 @@ async def clone_voice(
         profile_id=profile.id,
         audio_bytes=audio_bytes,
         embedding_bytes=embedding_bytes,
-        reference_text="",
+        reference_text=reference_text,
         duration_seconds=duration,
         is_primary=True,
         db=db,
@@ -442,6 +544,9 @@ async def generate_speech(req: GenerateRequest, db: Session = Depends(get_db)):
         kwargs["temperature"] = req.temperature
     if hasattr(req, "repetition_penalty") and req.repetition_penalty is not None:
         kwargs["repetition_penalty"] = req.repetition_penalty
+    # Phase 2: Seed control for reproducibility
+    if req.seed is not None:
+        kwargs["seed"] = req.seed
 
     # Warn if voice was cloned with a different engine
     manager = get_manager()
@@ -457,6 +562,7 @@ async def generate_speech(req: GenerateRequest, db: Session = Depends(get_db)):
         "language": req.language, "emotion": req.emotion,
         "speed": req.speed, "pitch": req.pitch,
         "style": req.style, "engine": manager.active_model_id,
+        "seed": req.seed,
     }
     cached = get_cached(req.text, req.voiceId, **cache_settings)
     if cached:
@@ -634,13 +740,22 @@ async def add_voice_sample(
     if len(audio_bytes) == 0:
         raise HTTPException(400, "Empty audio file")
 
+    # Validate reference audio
+    is_valid, error_msg = validate_reference_audio(audio_bytes=audio_bytes)
+    if not is_valid:
+        logger.warning(f"Sample validation: {error_msg}")
+
     audio_bytes = sanitize_reference_audio(audio_bytes)
 
-    # Clone to get embedding
+    # Clone to get embedding (with reference text for quality)
     manager = get_manager()
     engine = manager.get_current_engine()
-    clone_result = engine.clone_voice(audio_bytes)
+    clone_result = engine.clone_voice(audio_bytes, ref_text=reference_text)
     embedding_bytes = clone_result["prompt_bytes"]
+    
+    # Use auto-transcribed text if engine returned it
+    if not reference_text and "reference_text" in clone_result:
+        reference_text = clone_result["reference_text"]
 
     duration = None
     try:
@@ -752,181 +867,6 @@ async def clear_all_history(
     """Clear generation history."""
     count = history_module.clear_history(db, profile_id)
     return {"status": "cleared", "deleted_count": count}
-
-
-# ==============================
-# Foley / Sound Effects
-# ==============================
-# FoleyRequest imported from schemas.py
-
-@app.post("/api/foley")
-async def generate_foley(req: FoleyRequest):
-    """Generate sound effects from a text description (requires Bark)."""
-    logger.info(f"Foley generation: {req.description[:60]}")
-    manager = get_manager()
-    engine = manager.get_current_engine()
-
-    caps = engine.get_capabilities()
-    if not caps.get("foley", False):
-        raise HTTPException(
-            400,
-            f"The currently loaded model ({manager.active_model_id}) does not support foley/sound-effect generation. Switch to Bark."
-        )
-
-    audio_bytes = engine.generate_foley(req.description)
-    audio_bytes = master_audio(audio_bytes)
-    return Response(content=audio_bytes, media_type="audio/wav",
-                    headers={"Content-Disposition": "attachment; filename=foley.wav"})
-
-
-# ==============================
-# Cross-Lingual Voice Dubbing
-# ==============================
-# DubbingRequest imported from schemas.py
-
-@app.post("/api/dubbing")
-async def cross_lingual_dub(req: DubbingRequest, db: Session = Depends(get_db)):
-    """Clone voice and generate speech in a different language."""
-    logger.info(f"Dubbing: {req.voiceId} from {req.sourceLang} to {req.targetLang}")
-
-    manager = get_manager()
-    engine = manager.get_current_engine()
-
-    caps = engine.get_capabilities()
-    if not caps.get("cross_lingual", False):
-        raise HTTPException(
-            400,
-            f"The currently loaded model ({manager.active_model_id}) does not support cross-lingual dubbing. Switch to CosyVoice or XTTS v2."
-        )
-
-    profile = profiles_module.get_profile(req.voiceId, db)
-    if not profile:
-        raise HTTPException(404, f"Voice not found: {req.voiceId}")
-
-    sample_path = profiles_module.get_profile_sample_path(req.voiceId, db)
-    if not sample_path:
-        raise HTTPException(404, "No audio sample available for dubbing")
-
-    with open(sample_path, "rb") as f:
-        audio_bytes = f.read()
-
-    dubbed_audio = engine.cross_lingual_clone(
-        audio_bytes=audio_bytes,
-        text=req.text,
-        source_lang=req.sourceLang,
-        target_lang=req.targetLang,
-    )
-    dubbed_audio = master_audio(dubbed_audio)
-    return Response(content=dubbed_audio, media_type="audio/wav",
-                    headers={"Content-Disposition": "attachment; filename=dubbed.wav"})
-
-
-# ==============================
-# Podcast Auto-Generation
-# ==============================
-# PodcastRequest imported from schemas.py
-
-@app.post("/api/podcast")
-async def generate_podcast(req: PodcastRequest, db: Session = Depends(get_db)):
-    """Generate a multi-speaker podcast from a script. Works with ALL engines."""
-    logger.info("Generating podcast...")
-
-    # Validate both voices
-    emb_a = profiles_module.get_profile_embedding_path(req.voiceIdA, db)
-    emb_b = profiles_module.get_profile_embedding_path(req.voiceIdB, db)
-    if not emb_a:
-        raise HTTPException(404, f"Speaker A voice not found: {req.voiceIdA}")
-    if not emb_b:
-        raise HTTPException(404, f"Speaker B voice not found: {req.voiceIdB}")
-
-    # Parse script into speaker turns
-    script_lines = parse_multi_speaker_script(req.script)
-    if not script_lines:
-        raise HTTPException(400, "Could not parse any speaker lines. Use 'A:' and 'B:' prefixes.")
-
-    # Map speaker labels to embeddings
-    voice_map = {"A": emb_a, "B": emb_b}
-
-    manager = get_manager()
-    engine = manager.get_current_engine()
-
-    # Generate each line using the engine's generate_speech (works with ALL engines)
-    segments = []
-    sample_rate = None
-
-    for i, line in enumerate(script_lines):
-        speaker = line["speaker"].upper()
-        text = line["text"]
-
-        # Map speaker to embedding (default to A for unknown speakers)
-        embedding = voice_map.get(speaker, emb_a)
-
-        logger.info(f"  Podcast [{speaker}] ({i+1}/{len(script_lines)}): {text[:50]}...")
-
-        try:
-            audio_bytes = engine.generate_speech(
-                text=text,
-                embedding_path=embedding,
-                language=req.language,
-            )
-            data, sr = sf.read(io.BytesIO(audio_bytes))
-            if sample_rate is None:
-                sample_rate = sr
-            segments.append(data)
-        except Exception as e:
-            logger.error(f"  Failed to generate line {i+1}: {e}")
-            # Add silence as placeholder for failed line
-            if sample_rate:
-                segments.append(np.zeros(int(sample_rate * 0.5)))
-            continue
-
-    if not segments or sample_rate is None:
-        raise HTTPException(500, "Failed to generate any audio segments")
-
-    # Concatenate with natural pauses between speaker turns
-    pause = np.zeros(int(sample_rate * 0.4), dtype=np.float32)
-    combined = []
-    for i, seg in enumerate(segments):
-        combined.append(seg.astype(np.float32))
-        if i < len(segments) - 1:
-            combined.append(pause)
-
-    result = np.concatenate(combined)
-
-    # Normalize
-    if np.abs(result).max() > 0:
-        result = result / np.abs(result).max() * 0.95
-
-    buffer = io.BytesIO()
-    sf.write(buffer, result, sample_rate, format="WAV")
-    buffer.seek(0)
-    audio_bytes = master_audio(buffer.getvalue())
-
-    logger.info(f"Podcast generated: {len(script_lines)} lines, {len(audio_bytes)} bytes")
-    return Response(content=audio_bytes, media_type="audio/wav",
-                    headers={"Content-Disposition": "attachment; filename=podcast.wav"})
-
-
-# ==============================
-# Audio In-Painting
-# ==============================
-@app.post("/api/inpaint")
-async def audio_inpaint(
-    audio: UploadFile = File(...),
-    original_text: str = Form(...),
-    corrected_text: str = Form(...),
-):
-    """Replace a segment of audio with corrected version, keeping same voice."""
-    logger.info(f"Audio inpainting: '{original_text}' -> '{corrected_text}'")
-
-    manager = get_manager()
-    engine = manager.get_current_engine()
-
-    # No engine currently supports inpainting — give a clear error
-    raise HTTPException(
-        400,
-        f"The currently loaded model ({manager.active_model_id}) does not support audio in-painting. This feature is planned for a future update."
-    )
 
 
 # ==============================
@@ -1465,6 +1405,29 @@ async def import_voice_endpoint(file: UploadFile = File(...), db: Session = Depe
         raise HTTPException(400, str(e))
 
 
+@app.post("/api/transcribe")
+async def transcribe_audio_endpoint(audio: UploadFile = File(...)):
+    """Transcribe audio bytes using Whisper for better cloning accuracy."""
+    try:
+        content = await audio.read()
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        
+        try:
+            import whisper
+            # Use 'base' model for speed in transcription
+            model = whisper.load_model("base")
+            result = model.transcribe(tmp_path)
+            return {"text": result.get("text", "").strip()}
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+    except Exception as e:
+        logger.error(f"Transcription failed: {e}")
+        raise HTTPException(500, detail=f"Transcription failed: {str(e)}")
+
+
 # ==============================
 # #6 — Subtitle/SRT Generator
 # ==============================
@@ -1598,51 +1561,336 @@ async def generate_emotion_timeline(req: EmotionTimelineRequest, db: Session = D
 
 
 # ==============================
-# #9 — A/B Voice Comparison
+# Whisper Auto-Transcription (Turbo model)
 # ==============================
-# CompareRequest imported from schemas.py
+@app.post("/api/transcribe")
+async def transcribe_audio(
+    audio: UploadFile = File(...),
+):
+    """
+    Transcribe audio using Whisper Turbo (large-v3-turbo).
+    Auto-detects language and returns the transcription text.
+    Used by the frontend to pre-fill reference text for voice cloning.
+    """
+    logger.info(f"Transcribing audio: {audio.filename}")
+    audio_bytes = await audio.read()
+    if len(audio_bytes) == 0:
+        raise HTTPException(400, "Empty audio file")
+
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+
+    try:
+        try:
+            import whisper
+            model = whisper.load_model("turbo")
+            result = model.transcribe(tmp_path, language=None)
+            text = result.get("text", "").strip()
+            detected_language = result.get("language", "en")
+            
+            return {
+                "text": text,
+                "language": detected_language,
+                "success": True,
+            }
+        except ImportError:
+            raise HTTPException(
+                501,
+                "Whisper is not installed. Install with: pip install openai-whisper"
+            )
+        except Exception as e:
+            logger.error(f"Transcription failed: {e}", exc_info=True)
+            raise HTTPException(500, f"Transcription failed: {str(e)}")
+    finally:
+        os.unlink(tmp_path)
 
 
-@app.post("/api/compare")
-async def compare_voices(req: CompareRequest, db: Session = Depends(get_db)):
-    """Generate the same text with two different voices for comparison."""
-    import base64
+# ==============================
+# Podcast Studio
+# ==============================
+@app.post("/api/podcast")
+async def generate_podcast(req: PodcastTimelineRequest, db: Session = Depends(get_db)):
+    """Generate a multi-speaker podcast. Each block has a voice_id and text."""
+    logger.info(f"Generating podcast: {req.story_name} ({len(req.blocks)} segments)")
 
-    for label, vid in [("A", req.voiceIdA), ("B", req.voiceIdB)]:
-        v = profiles_module.get_profile(vid, db)
-        if not v:
-            raise HTTPException(404, f"Voice {label} not found: {vid}")
-
-    emb_a = profiles_module.get_profile_embedding_path(req.voiceIdA, db)
-    emb_b = profiles_module.get_profile_embedding_path(req.voiceIdB, db)
+    if not req.blocks:
+        raise HTTPException(400, "No podcast blocks provided.")
 
     manager = get_manager()
     engine = manager.get_current_engine()
 
-    results = {}
-    for label, emb, vid in [("A", emb_a, req.voiceIdA), ("B", emb_b, req.voiceIdB)]:
-        audio = engine.generate_speech(
-            text=req.text, embedding_path=emb, language=req.language,
-        )
-        audio = master_audio(audio)
-        results[label] = {
-            "voice_id": vid,
-            "size_bytes": len(audio),
-            "audio_base64": base64.b64encode(audio).decode(),
-        }
+    segments = []
+    sample_rate = None
 
-    return {"text": req.text, "results": results}
+    for i, block in enumerate(req.blocks):
+        profile = profiles_module.get_profile(block.voice_id, db)
+        if not profile:
+            raise HTTPException(404, f"Voice not found: {block.voice_id}")
+
+        embedding = profiles_module.get_profile_embedding_path(block.voice_id, db)
+        if not embedding:
+            raise HTTPException(404, f"Voice embedding not found: {block.voice_id}")
+
+        logger.info(f"  Podcast [{i+1}/{len(req.blocks)}]: {block.text[:50]}...")
+
+        try:
+            audio_bytes = engine.generate_speech(
+                text=block.text,
+                embedding_path=embedding,
+                language=req.language,
+            )
+            data, sr = sf.read(io.BytesIO(audio_bytes))
+            if sample_rate is None:
+                sample_rate = sr
+            segments.append(data)
+        except Exception as e:
+            logger.error(f"  Failed segment {i+1}: {e}")
+            if sample_rate:
+                segments.append(np.zeros(int(sample_rate * 0.5)))
+            continue
+
+    if not segments or sample_rate is None:
+        raise HTTPException(500, "Failed to generate any audio segments")
+
+    # Concatenate with pauses between speakers
+    pause = np.zeros(int(sample_rate * 0.4), dtype=np.float32)
+    combined = []
+    for i, seg in enumerate(segments):
+        combined.append(seg.astype(np.float32))
+        if i < len(segments) - 1:
+            combined.append(pause)
+
+    result = np.concatenate(combined)
+    if np.abs(result).max() > 0:
+        result = result / np.abs(result).max() * 0.95
+
+    buffer = io.BytesIO()
+    sf.write(buffer, result, sample_rate, format="WAV")
+    buffer.seek(0)
+    audio_bytes = master_audio(buffer.getvalue())
+
+    logger.info(f"Podcast generated: {len(req.blocks)} segments, {len(audio_bytes)} bytes")
+    return Response(
+        content=audio_bytes, media_type="audio/wav",
+        headers={"Content-Disposition": "attachment; filename=podcast.wav"},
+    )
 
 
 # ==============================
-# #12 — Export Format Conversion
+# GPU Stats & Model Management
 # ==============================
-# ConvertRequest imported from schemas.py
+@app.get("/api/models/gpu-stats")
+async def get_gpu_stats():
+    """Get real-time GPU memory and utilization stats."""
+    gpus = []
+    error = None
+    
+    # Try pynvml first for detailed stats
+    try:
+        import pynvml
+        pynvml.nvmlInit()
+        device_count = pynvml.nvmlDeviceGetCount()
+        for i in range(device_count):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+            mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            name = pynvml.nvmlDeviceGetName(handle)
+            if isinstance(name, bytes):
+                name = name.decode("utf-8")
+            gpus.append({
+                "index": i,
+                "name": name,
+                "memory_used_mb": round(mem.used / 1048576),
+                "memory_total_mb": round(mem.total / 1048576),
+                "memory_free_mb": round(mem.free / 1048576),
+                "gpu_util_percent": util.gpu,
+                "memory_util_percent": util.memory,
+                "driver": "pynvml"
+            })
+    except Exception as nvml_err:
+        error = f"NVML Error: {nvml_err}"
+        logger.warning(f"pynvml failed: {nvml_err}")
+
+    # Fallback to torch for basic memory info if pynvml failed or is partial
+    if not gpus:
+        try:
+            import torch
+            if torch.cuda.is_available():
+                for i in range(torch.cuda.device_count()):
+                    name = torch.cuda.get_device_name(i)
+                    total_mem = torch.cuda.get_device_properties(i).total_memory
+                    used_mem = torch.cuda.memory_reserved(i) # approx
+                    gpus.append({
+                        "index": i,
+                        "name": f"{name} (via Torch)",
+                        "memory_used_mb": round(used_mem / 1048576),
+                        "memory_total_mb": round(total_mem / 1048576),
+                        "memory_free_mb": round((total_mem - used_mem) / 1048576),
+                        "gpu_util_percent": 0, # torch cant get util easily
+                        "memory_util_percent": 0,
+                        "driver": "torch"
+                    })
+        except Exception as torch_err:
+            error = f"{error} | Torch Error: {torch_err}" if error else str(torch_err)
+
+    return {"gpus": gpus, "error": error}
 
 
-@app.post("/api/generate/export")
-async def generate_with_format(req: ConvertRequest, db: Session = Depends(get_db)):
-    """Generate speech and export in the specified format (WAV, MP3, FLAC, OGG)."""
+@app.post("/api/models/unload-all")
+async def unload_all_models():
+    """Unload all models from GPU VRAM."""
+    manager = get_manager()
+    unloaded = []
+    for model_id in list(manager.loaded_engines.keys()):
+        try:
+            eng = manager.loaded_engines[model_id]
+            if hasattr(eng, "unload"):
+                eng.unload()
+            del manager.loaded_engines[model_id]
+            unloaded.append(model_id)
+        except Exception as e:
+            logger.warning(f"Failed to unload {model_id}: {e}")
+    manager.active_model_id = None
+
+    import torch
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    logger.info(f"Unloaded all models: {unloaded}")
+    return {"status": "success", "unloaded": unloaded}
+
+
+@app.post("/api/models/{model_id}/unload")
+async def unload_specific_model(model_id: str):
+    """Unload a specific model from GPU VRAM."""
+    manager = get_manager()
+    if model_id not in manager.loaded_engines:
+        raise HTTPException(404, f"Model not loaded: {model_id}")
+
+    try:
+        eng = manager.loaded_engines[model_id]
+        if hasattr(eng, "unload"):
+            eng.unload()
+        del manager.loaded_engines[model_id]
+    except Exception as e:
+        raise HTTPException(500, f"Failed to unload: {e}")
+
+    if manager.active_model_id == model_id:
+        manager.active_model_id = None
+
+    import torch
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    logger.info(f"Unloaded model: {model_id}")
+    return {"status": "success", "model_id": model_id}
+
+
+# ==============================
+# Real-Time Download Progress (SSE)
+# ==============================
+@app.get("/api/models/progress/{model_name}")
+async def get_model_progress(model_name: str):
+    """
+    SSE endpoint for real-time model download/load progress.
+    Sends progress events with: progress %, filename, speed, ETA.
+    Sends heartbeat every 1s to keep connection alive.
+    """
+    progress_manager = get_progress_manager()
+    
+    return StreamingResponse(
+        progress_manager.subscribe(model_name),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ==============================
+# Hardware Accelerator Detection
+# ==============================
+@app.get("/api/accelerators")
+async def get_accelerators():
+    """
+    Detect available hardware accelerators.
+    Returns info about CUDA, MPS, DirectML, XPU, MLX support.
+    """
+    return detect_accelerators()
+
+
+# ==============================
+# Profile Import/Export (.resound.zip)
+# ==============================
+@app.get("/api/voices/{voice_id}/export")
+async def export_voice_profile(voice_id: str, db: Session = Depends(get_db)):
+    """Export a voice profile as a .resound.zip file."""
+    zip_bytes = profiles_module.export_profile(voice_id, db)
+    if not zip_bytes:
+        raise HTTPException(404, f"Voice not found: {voice_id}")
+    
+    profile = profiles_module.get_profile(voice_id, db)
+    safe_name = (profile.name or "voice").replace(" ", "_").replace("/", "_")
+    
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename={safe_name}.resound.zip",
+        },
+    )
+
+
+@app.post("/api/profiles/import")
+async def import_voice_profile(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Import a voice profile from a .resound.zip file."""
+    if not file.filename or not file.filename.endswith(".zip"):
+        raise HTTPException(400, "Please upload a .resound.zip file")
+    
+    zip_bytes = await file.read()
+    if len(zip_bytes) == 0:
+        raise HTTPException(400, "Empty file")
+
+    manager = get_manager()
+    profile = profiles_module.import_profile(
+        zip_bytes=zip_bytes,
+        engine_id=manager.active_model_id or "unknown",
+        db=db,
+    )
+    
+    if not profile:
+        raise HTTPException(500, "Failed to import voice profile")
+    
+    from sqlalchemy import func as sqlfunc
+    from database import ProfileSample
+    sample_count = db.query(sqlfunc.count(ProfileSample.id)).filter(
+        ProfileSample.profile_id == profile.id
+    ).scalar()
+    
+    result = profiles_module._profile_to_dict(profile, sample_count)
+    logger.info(f"Voice profile imported: {profile.id} ({profile.name})")
+    return result
+
+
+# ==============================
+# Streaming WAV Generation (64KB chunks)
+# ==============================
+@app.post("/api/generate/stream-wav")
+async def generate_speech_stream_wav(req: StreamGenerateRequest, db: Session = Depends(get_db)):
+    """
+    Stream generated audio as raw WAV in 64KB chunks.
+    Unlike the SSE stream endpoint, this returns a single WAV file
+    streamed incrementally for better playback experience.
+    """
     profile = profiles_module.get_profile(req.voiceId, db)
     if not profile:
         raise HTTPException(404, f"Voice not found: {req.voiceId}")
@@ -1653,168 +1901,36 @@ async def generate_with_format(req: ConvertRequest, db: Session = Depends(get_db
 
     manager = get_manager()
     engine = manager.get_current_engine()
+    
+    kwargs = {}
+    if req.seed is not None:
+        kwargs["seed"] = req.seed
 
+    # Generate full audio first (true streaming would require model-level support)
     audio_bytes = engine.generate_speech(
-        text=req.text, embedding_path=embedding_path, language=req.language,
+        text=req.text,
+        embedding_path=embedding_path,
+        language=req.language,
+        emotion=req.emotion,
+        speed=req.speed,
+        pitch=req.pitch,
+        style=req.style,
+        **kwargs,
     )
     audio_bytes = master_audio(audio_bytes)
 
-    # Convert to requested format
-    converted, mime_type = convert_audio_format(audio_bytes, req.format)
-    ext = req.format.lower() if req.format.lower() in {"wav", "mp3", "flac", "ogg"} else "wav"
+    async def _wav_stream():
+        """Yield WAV audio in 64KB chunks."""
+        chunk_size = 64 * 1024  # 64KB
+        for i in range(0, len(audio_bytes), chunk_size):
+            yield audio_bytes[i:i + chunk_size]
 
-    return Response(
-        content=converted,
-        media_type=mime_type,
-        headers={"Content-Disposition": f"attachment; filename=output.{ext}"},
+    return StreamingResponse(
+        _wav_stream(),
+        media_type="audio/wav",
+        headers={
+            "Content-Disposition": "attachment; filename=output.wav",
+            "Content-Length": str(len(audio_bytes)),
+        },
     )
 
-
-# ==============================
-# #1 — Voice Conversion (Stub)
-# ==============================
-@app.post("/api/voice-convert")
-async def voice_conversion(
-    audio: UploadFile = File(...),
-    voiceId: str = Form(...),
-):
-    """Convert the voice in an audio file to a cloned voice. (Coming Soon)"""
-    raise HTTPException(
-        501,
-        "Voice Conversion (SVC) is coming soon. It requires the RVC engine which is not yet integrated. "
-        "Stay tuned for AI cover generation and voice swapping!"
-    )
-
-
-# ==============================
-# #2 — Real-time Voice Changer (Stub)
-# ==============================
-@app.post("/api/voice-changer")
-async def realtime_voice_changer():
-    """Real-time voice transformation via WebSocket. (Coming Soon)"""
-    raise HTTPException(
-        501,
-        "Real-time Voice Changer is coming soon. It requires a low-latency RVC pipeline. "
-        "This will enable live voice transformation for streaming and gaming."
-    )
-
-
-# ==============================
-# #10 — Voice Fine-tuning (Stub)
-# ==============================
-@app.post("/api/fine-tune")
-async def voice_fine_tune(
-    audio: UploadFile = File(...),
-    voiceName: str = Form(...),
-):
-    """Upload 5+ minutes of audio to fine-tune a model on a specific voice. (Coming Soon)"""
-    raise HTTPException(
-        501,
-        "Voice Fine-tuning is coming soon. This feature will allow training a custom model "
-        "on your voice for dramatically higher quality cloning. Requires significant GPU resources."
-    )
-
-
-# ==============================
-# #13 — Stories / Timeline Editor
-# ==============================
-
-@app.get("/api/stories", response_model=List[StoryResponse])
-async def list_stories(db: Session = Depends(get_db)):
-    """List all stories."""
-    return stories_module.get_stories(db)
-
-@app.post("/api/stories", response_model=StoryResponse)
-async def create_story(req: StoryCreate, db: Session = Depends(get_db)):
-    """Create a new story/project."""
-    return stories_module.create_story(db, req)
-
-@app.get("/api/stories/{story_id}", response_model=StoryResponse)
-async def get_story_details(story_id: str, db: Session = Depends(get_db)):
-    """Get story and its timeline items."""
-    return stories_module.get_story(db, story_id)
-
-@app.delete("/api/stories/{story_id}")
-async def delete_story(story_id: str, db: Session = Depends(get_db)):
-    """Delete a story and its items."""
-    stories_module.delete_story(db, story_id)
-    return {"status": "ok"}
-
-@app.post("/api/stories/{story_id}/items", response_model=StoryResponse)
-async def add_story_item(story_id: str, req: StoryItemCreate, db: Session = Depends(get_db)):
-    """Add a generated audio clip to the timeline."""
-    return stories_module.add_item_to_story(db, story_id, req)
-
-@app.put("/api/stories/{story_id}/items/{item_id}/move", response_model=StoryResponse)
-async def move_item(story_id: str, item_id: str, req: StoryItemMove, db: Session = Depends(get_db)):
-    """Move a clip along the timeline or to a different track."""
-    return stories_module.move_story_item(db, story_id, item_id, req)
-
-@app.put("/api/stories/{story_id}/items/{item_id}/trim", response_model=StoryResponse)
-async def trim_item(story_id: str, item_id: str, req: StoryItemTrim, db: Session = Depends(get_db)):
-    """Trim a clip's start or end without destroying the original audio."""
-    return stories_module.trim_story_item(db, story_id, item_id, req)
-
-@app.delete("/api/stories/{story_id}/items/{item_id}", response_model=StoryResponse)
-async def delete_item(story_id: str, item_id: str, db: Session = Depends(get_db)):
-    """Remove a clip from the story timeline."""
-    return stories_module.delete_story_item(db, story_id, item_id)
-
-
-# ==============================
-# Podcast Studio Timeline
-# ==============================
-@app.post("/api/podcast/generate-timeline")
-async def generate_podcast_timeline(req: PodcastTimelineRequest, db: Session = Depends(get_db)):
-    """Generate a multi-speaker podcast and save it as a Timeline Story."""
-    logger.info(f"Generating podcast timeline: {req.story_name}")
-
-    manager = get_manager()
-    engine = manager.get_current_engine()
-
-    # 1. Create a new Story
-    story_data = StoryCreate(name=req.story_name, description="Generated from Podcast Studio")
-    story = stories_module.create_story(db, story_data)
-
-    current_position_ms = 0
-    GAP_MS = 500  # 500ms pause between speakers
-
-    # 2. Iterate through blocks and generate TTS
-    for block in req.blocks:
-        profile = profiles_module.get_profile(db, block.voice_id)
-        if not profile or not profile.samples:
-            raise HTTPException(status_code=404, detail=f"Voice profile not found or has no samples: {block.voice_id}")
-
-        sample = profile.samples[0]
-        prompt_bytes = sample.embedding_bytes or sample.audio_bytes
-
-        # Generate audio
-        audio_bytes = engine.generate(
-            text=block.text,
-            prompt_bytes=prompt_bytes,
-            language=req.language,
-        )
-
-        # Record in history (computes duration)
-        gen = history_module.record_generation(
-            profile_id=profile.id,
-            text=block.text,
-            audio_bytes=audio_bytes,
-            language=req.language,
-            engine_id=manager.active_model_id or "unknown",
-            db=db,
-        )
-
-        # 3. Add to Timeline Story
-        item_data = StoryItemCreate(
-            generation_id=gen.id,
-            position_ms=current_position_ms,
-            track=0
-        )
-        stories_module.add_item_to_story(db, story["id"], item_data)
-
-        # Advance timeline
-        duration_ms = int((gen.duration_seconds or 5.0) * 1000)
-        current_position_ms += duration_ms + GAP_MS
-
-    return {"story_id": story["id"]}

@@ -98,6 +98,7 @@ class GenerateRequest(BaseModel):
     pitch: float = Field(1.0, ge=0.25, le=4.0)
     duration: Optional[float] = None
     style: Optional[str] = None
+    seed: Optional[int] = None  # For reproducible generation
 
 class GenerationResponse(BaseModel):
     id: str
@@ -155,33 +156,8 @@ class PreviewRequest(BaseModel):
 
 
 # ============================================
-# FOLEY / SOUND EFFECTS
+# PODCAST STUDIO
 # ============================================
-
-class FoleyRequest(BaseModel):
-    description: str = Field(..., min_length=1)
-
-
-# ============================================
-# DUBBING
-# ============================================
-
-class DubbingRequest(BaseModel):
-    text: str
-    voiceId: str
-    sourceLang: str = "English"
-    targetLang: str = "Hindi"
-
-
-# ============================================
-# PODCAST
-# ============================================
-
-class PodcastRequest(BaseModel):
-    script: str
-    voiceIdA: str
-    voiceIdB: str
-    language: str = "English"
 
 class PodcastBlock(BaseModel):
     voice_id: str
@@ -205,6 +181,7 @@ class StreamGenerateRequest(BaseModel):
     speed: float = 1.0
     pitch: float = 1.0
     style: Optional[str] = None
+    seed: Optional[int] = None
 
 class AsyncGenerateRequest(BaseModel):
     text: str

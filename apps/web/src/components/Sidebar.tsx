@@ -14,11 +14,8 @@ const NAV_ITEMS = [
     { href: "/", label: "Dashboard", icon: Home },
     { href: "/clone", label: "Voice Cloning", icon: Mic },
     { href: "/generate", label: "Generate Speech", icon: Volume2 },
+    { href: "/podcast", label: "Podcast Studio", icon: Podcast },
     { href: "/design", label: "Voice Design", icon: Sparkles },
-    { href: "/foley", label: "Sound Effects", icon: Music },
-    { href: "/dubbing", label: "Voice Dubbing", icon: Languages },
-    { href: "/stories", label: "Timeline Editor", icon: Podcast },
-    { href: "/inpaint", label: "Audio Inpainting", icon: Eraser },
     { href: "/voices", label: "My Voices", icon: Library },
     { href: "/history", label: "History", icon: Clock },
     { href: "/models", label: "Model Manager", icon: HardDrive },
@@ -34,6 +31,10 @@ export default function Sidebar() {
         startPolling(5000);
         return () => stopPolling();
     }, [startPolling, stopPolling]);
+
+    const handleEngineUpdate = React.useCallback((id: string, caps: string[]) => {
+        setCapabilities(caps);
+    }, [setCapabilities]);
 
     return (
         <aside
@@ -109,7 +110,7 @@ export default function Sidebar() {
             </Link>
 
             <div style={{ padding: "0 16px", marginBottom: "32px", flexShrink: 0 }}>
-                <ModelSelector onEngineUpdate={(id: string, caps: string[]) => setCapabilities(caps)} />
+                <ModelSelector onEngineUpdate={handleEngineUpdate} />
             </div>
 
             {/* Navigation */}

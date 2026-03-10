@@ -36,6 +36,7 @@ export interface GenerationRequest {
     duration?: number;
     paralinguistics?: string[];
     style?: string;
+    seed?: number;
 }
 
 export interface GenerationResponse {
@@ -96,6 +97,8 @@ export interface ModelInfo {
     capabilities: string[];
     features: string[];
     is_downloaded?: boolean;
+    is_loaded?: boolean;
+    device?: string;
 }
 
 export interface ModelsResponse {

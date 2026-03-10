@@ -227,7 +227,7 @@ export function ModelSelector({ onEngineUpdate }: ModelSelectorProps) {
                         </div>
                         {activeModel && !isLoading && (
                             <div style={{ fontSize: "0.6rem", fontWeight: 800, color: "var(--text-muted)", marginTop: "2px" }}>
-                                VRAM: {activeModel.vram_estimate}
+                                VRAM: {activeModel.vram_estimate} • {activeModel.device?.toUpperCase() || "CPU"}
                             </div>
                         )}
                     </div>

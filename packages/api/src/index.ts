@@ -115,6 +115,30 @@ export async function importVoice(formData: FormData): Promise<SavedVoice> {
     return response.data;
 }
 
+// ---- Profile Import/Export (.resound.zip) ----
+export function getProfileExportUrl(voiceId: string): string {
+    return `${BACKEND_URL}/api/voices/${voiceId}/export`;
+}
+
+export async function exportVoiceProfile(voiceId: string): Promise<Blob> {
+    const response = await api.get(`/api/voices/${voiceId}/export`, {
+        responseType: "blob",
+    });
+    return response.data;
+}
+
+export async function importVoiceProfile(formData: FormData): Promise<SavedVoice> {
+    const response = await api.post("/api/profiles/import", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data;
+}
+
+// ---- Model Download Progress (SSE) ----
+export function getModelProgressUrl(modelName: string): string {
+    return `${BACKEND_URL}/api/models/progress/${encodeURIComponent(modelName)}`;
+}
+
 // ---- Generation History ----
 export interface HistoryItem {
     id: string;

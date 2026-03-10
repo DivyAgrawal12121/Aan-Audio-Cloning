@@ -10,6 +10,7 @@ import {
     Plus,
     ChevronDown,
     Wand2,
+    Dice5,
 } from "lucide-react";
 import { AudioPlayer, VoiceCard, useSimulatedProgress } from "@resound-studio/ui";
 import {
@@ -30,6 +31,8 @@ export default function GeneratePage() {
     const [duration, setDuration] = useState<number | null>(null);
     const [useDuration, setUseDuration] = useState(false);
     const [style, setStyle] = useState("");
+    const [seed, setSeed] = useState<number | null>(null);
+    const [useSeed, setUseSeed] = useState(false);
     const [outputUrl, setOutputUrl] = useState<string | null>(null);
     const [voices, setVoices] = useState<SavedVoice[]>([]);
     const [showVoicePicker, setShowVoicePicker] = useState(false);
@@ -72,6 +75,7 @@ export default function GeneratePage() {
                 pitch,
                 duration: useDuration ? (duration ?? undefined) : undefined,
                 style: style || undefined,
+                seed: useSeed ? (seed ?? undefined) : undefined,
             });
             if (outputUrl) URL.revokeObjectURL(outputUrl);
             setOutputUrl(URL.createObjectURL(blob));
@@ -248,6 +252,53 @@ export default function GeneratePage() {
                             onChange={(e) => setStyle(e.target.value)}
                             style={{ minHeight: "80px", background: "#fff" }}
                         />
+                    </div>
+
+                    {/* Seed Control */}
+                    <div className="section-card">
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <p className="section-label" style={{ display: "flex", alignItems: "center", gap: "8px", color: "#000", margin: 0 }}>
+                                <Dice5 size={16} strokeWidth={3} /> Reproducibility
+                            </p>
+                            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={useSeed}
+                                    onChange={(e) => setUseSeed(e.target.checked)}
+                                    style={{ width: 16, height: 16, cursor: "pointer" }}
+                                />
+                                <span style={{ fontSize: "0.7rem", fontWeight: 900 }}>FIXED SEED</span>
+                            </label>
+                        </div>
+                        {useSeed && (
+                            <div style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
+                                <input
+                                    type="number"
+                                    className="input-field"
+                                    placeholder="42"
+                                    value={seed ?? ""}
+                                    onChange={(e) => setSeed(e.target.value ? parseInt(e.target.value) : null)}
+                                    style={{ flex: 1 }}
+                                />
+                                <button
+                                    onClick={() => setSeed(Math.floor(Math.random() * 999999))}
+                                    style={{
+                                        background: "var(--accent-purple)",
+                                        border: "2px solid #000",
+                                        padding: "8px 12px",
+                                        fontSize: "0.7rem",
+                                        fontWeight: 900,
+                                        cursor: "pointer",
+                                        boxShadow: "2px 2px 0px #000",
+                                    }}
+                                >
+                                    RANDOM
+                                </button>
+                            </div>
+                        )}
+                        <p style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 600, marginTop: "6px" }}>
+                            Same seed + same text = identical output
+                        </p>
                     </div>
                 </div>
             </div>

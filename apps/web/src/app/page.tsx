@@ -30,32 +30,11 @@ const FEATURES = [
     accent: "var(--accent-pink)",
   },
   {
-    icon: Music,
-    title: "Sound Effects",
-    desc: "Generate foley and ambient audio by describing any sound you can imagine.",
-    href: "/foley",
-    accent: "var(--accent-amber)",
-  },
-  {
-    icon: Languages,
-    title: "Voice Dubbing",
-    desc: "Clone your voice and have it speak fluent French, Japanese, Hindi, and more.",
-    href: "/dubbing",
-    accent: "var(--accent-purple)",
-  },
-  {
     icon: Podcast,
     title: "Podcast Studio",
-    desc: "Write a script and auto-generate a full two-speaker podcast episode.",
+    desc: "Generate multi-speaker podcasts with natural transitions and conversational flow.",
     href: "/podcast",
     accent: "var(--accent-pink)",
-  },
-  {
-    icon: Eraser,
-    title: "Audio Inpainting",
-    desc: "Fix stumbles or coughs in recordings by regenerating just the bad segment.",
-    href: "/inpaint",
-    accent: "var(--accent-cyan)",
   },
   {
     icon: Waves,
@@ -70,7 +49,7 @@ const STATS = [
   { label: "Languages", value: "11+", icon: Globe, bg: "var(--accent-cyan)" },
   { label: "Emotions", value: "10+", icon: Smile, bg: "var(--accent-pink)" },
   { label: "Cloning", value: "3 SEC", icon: Mic, bg: "var(--accent-purple)" },
-  { label: "Engines", value: "8 RUN", icon: Waves, bg: "var(--accent-amber)" },
+  { label: "Engines", value: "2 RUN", icon: Waves, bg: "var(--accent-amber)" },
 ];
 
 export default function DashboardPage() {
@@ -91,7 +70,7 @@ export default function DashboardPage() {
           }}
         >
           <span style={{ fontSize: "0.75rem", color: "#000", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.1em" }}>
-            8 AI Engines Online • GPU Accelerated
+            QWEN ENGINES ONLINE • GPU ACCELERATED
           </span>
         </div>
 

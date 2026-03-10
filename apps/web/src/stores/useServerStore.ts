@@ -35,6 +35,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
                     lastChecked: new Date(),
                 });
             } catch (err) {
+                console.warn("Server check failed:", err);
                 set({
                     status: "offline",
                     activeModel: null,

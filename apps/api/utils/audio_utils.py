@@ -3,9 +3,15 @@ import io
 import numpy as np
 import soundfile as sf
 import logging
-from typing import Optional
+from typing import Optional, Tuple
 
 logger = logging.getLogger("resound-studio.utils.audio")
+
+try:
+    import librosa
+except ImportError:
+    librosa = None
+    logger.warning("librosa is not installed. Advanced audio loading/processing will be limited.")
 
 try:
     from num2words import num2words
@@ -24,6 +30,118 @@ try:
 except ImportError:
     nr = None
     logger.warning("noisereduce is not installed. Reference audio sanitization will be skipped.")
+
+
+# ============================================
+# AUDIO LOADING & VALIDATION (Phase 0)
+# ============================================
+
+def load_audio(path: str, sample_rate: int = 24000, mono: bool = True) -> Tuple[np.ndarray, int]:
+    """
+    Load audio with consistent resampling via librosa.
+    Always returns (audio_array, sample_rate) at the target sample rate.
+    Falls back to soundfile if librosa is not available.
+    """
+    if librosa is not None:
+        audio, sr = librosa.load(path, sr=sample_rate, mono=mono)
+        return audio.astype(np.float32), sr
+    else:
+        audio, sr = sf.read(path)
+        if mono and len(audio.shape) > 1:
+            audio = audio.mean(axis=1)
+        return audio.astype(np.float32), sr
+
+
+def load_audio_bytes(audio_bytes: bytes, sample_rate: int = 24000, mono: bool = True) -> Tuple[np.ndarray, int]:
+    """
+    Load audio from bytes with consistent resampling.
+    """
+    import tempfile, os
+    if librosa is not None:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = tmp.name
+        try:
+            audio, sr = librosa.load(tmp_path, sr=sample_rate, mono=mono)
+            return audio.astype(np.float32), sr
+        finally:
+            os.unlink(tmp_path)
+    else:
+        audio, sr = sf.read(io.BytesIO(audio_bytes))
+        if mono and len(audio.shape) > 1:
+            audio = audio.mean(axis=1)
+        return audio.astype(np.float32), sr
+
+
+def validate_reference_audio(
+    audio_path: str = None,
+    audio_bytes: bytes = None,
+    min_duration: float = 2.0,
+    max_duration: float = 30.0,
+    min_rms: float = 0.01,
+) -> Tuple[bool, Optional[str]]:
+    """
+    Validate reference audio for voice cloning quality.
+    Checks: duration (2-30s), volume (not too quiet), clipping (not too loud).
+    
+    Returns:
+        (is_valid, error_message) — error_message is None if valid.
+    """
+    try:
+        if audio_path:
+            audio, sr = load_audio(audio_path)
+        elif audio_bytes:
+            audio, sr = load_audio_bytes(audio_bytes)
+        else:
+            return False, "No audio provided"
+
+        # Duration check
+        duration = len(audio) / sr
+        if duration < min_duration:
+            return False, f"Audio too short ({duration:.1f}s). Minimum is {min_duration}s for quality cloning."
+        if duration > max_duration:
+            return False, f"Audio too long ({duration:.1f}s). Maximum is {max_duration}s. Please trim your recording."
+
+        # Volume check (not too quiet / silent)
+        rms = np.sqrt(np.mean(audio ** 2))
+        if rms < min_rms:
+            return False, "Audio is too quiet or silent. Please record with more volume."
+
+        # Clipping detection (not too loud)
+        peak = np.abs(audio).max()
+        if peak > 0.99:
+            return False, "Audio is clipping (distorted). Please reduce your recording gain."
+
+        return True, None
+
+    except Exception as e:
+        return False, f"Failed to validate audio: {str(e)}"
+
+
+def normalize_audio(audio: np.ndarray, target_db: float = -20.0, peak_limit: float = 0.85) -> np.ndarray:
+    """
+    Normalize audio to a target RMS dB level with peak limiting.
+    Ensures consistent loudness across all reference samples.
+    
+    Args:
+        audio: Audio array (float32)
+        target_db: Target RMS level in dB (default: -20dB)
+        peak_limit: Maximum absolute sample value (default: 0.85)
+    
+    Returns:
+        Normalized audio array
+    """
+    audio = audio.astype(np.float32)
+    rms = np.sqrt(np.mean(audio ** 2))
+    
+    if rms > 0:
+        target_rms = 10 ** (target_db / 20)
+        gain = target_rms / rms
+        audio = audio * gain
+    
+    # Peak limiting to prevent clipping
+    audio = np.clip(audio, -peak_limit, peak_limit)
+    return audio
 
 
 def _replace_numbers_with_words(match) -> str:
