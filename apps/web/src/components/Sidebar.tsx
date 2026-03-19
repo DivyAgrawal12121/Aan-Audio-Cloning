@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
     Mic, Volume2, Library, Sparkles, Home, Settings, Waves,
-    Music, Languages, Podcast, Eraser, HardDrive, Clock, Headphones
+    Music, Languages, Podcast, Eraser, HardDrive, Clock, Headphones,
+    MessageSquare
 } from "lucide-react";
 import { ModelSelector } from "@resound-studio/ui";
 import { useServerStore } from "@/stores/useServerStore";
@@ -14,6 +15,7 @@ const NAV_ITEMS = [
     { href: "/", label: "Dashboard", icon: Home },
     { href: "/clone", label: "Voice Cloning", icon: Mic },
     { href: "/generate", label: "Generate Speech", icon: Volume2 },
+    { href: "/prompt", label: "Prompt Studio", icon: MessageSquare },
     { href: "/podcast", label: "Podcast Studio", icon: Podcast },
     { href: "/design", label: "Voice Design", icon: Sparkles },
     { href: "/voices", label: "My Voices", icon: Library },

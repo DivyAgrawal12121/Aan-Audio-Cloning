@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import {
   Mic, Volume2, Sparkles, ArrowRight, Waves, Globe, Smile,
-  Music, Languages, Podcast, Eraser,
+  Music, Languages, Podcast, Eraser, MessageSquare,
 } from "lucide-react";
 
 const FEATURES = [
@@ -35,6 +35,13 @@ const FEATURES = [
     desc: "Generate multi-speaker podcasts with natural transitions and conversational flow.",
     href: "/podcast",
     accent: "var(--accent-pink)",
+  },
+  {
+    icon: MessageSquare,
+    title: "Prompt Studio",
+    desc: "Describe how you want it to sound in one prompt. Text, emotion, style — all in one.",
+    href: "/prompt",
+    accent: "var(--accent-purple)",
   },
   {
     icon: Waves,

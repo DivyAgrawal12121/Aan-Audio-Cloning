@@ -116,6 +116,25 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 pip install -r requirements.txt
 ```
 
+### Step 4.5: Pre-downloading Models (Highly Recommended)
+
+While Resound Studio will download models automatically when you first use them, you can pre-download all of them at once to avoid waiting later.
+
+**On Windows:**
+Run the `download_models.bat` file in the root directory.
+
+**Manual (Any OS):**
+```bash
+# Activate your backend venv first
+cd apps/api
+source venv/bin/activate  # or .\venv\Scripts\activate on Windows
+
+# Use the Hugging Face CLI to download the Qwen family
+huggingface-cli download Qwen/Qwen3-TTS-12Hz-1.7B-Base
+huggingface-cli download Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign
+huggingface-cli download Qwen/Qwen3-TTS-12Hz-0.6B-Base
+```
+
 ### Step 5: Start the Platform
 
 You need to run two terminal windows.

@@ -191,6 +191,7 @@ class AsyncGenerateRequest(BaseModel):
     speed: float = 1.0
     pitch: float = 1.0
     style: Optional[str] = None
+    seed: Optional[int] = None
 
 
 # ============================================

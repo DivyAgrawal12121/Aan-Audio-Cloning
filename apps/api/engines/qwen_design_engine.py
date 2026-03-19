@@ -183,10 +183,52 @@ class QwenDesignEngine(BaseEngine):
         buffer.seek(0)
         return buffer.getvalue()
 
+    # ── Emotion-aware sampling profiles (shared with QwenEngine) ──
+    EMOTION_SAMPLING = {
+        "neutral": {"temperature": 0.7, "top_p": 0.9, "top_k": 50, "repetition_penalty": 1.0},
+        "happy": {"temperature": 0.95, "top_p": 0.95, "top_k": 80, "repetition_penalty": 1.1},
+        "sad": {"temperature": 0.5, "top_p": 0.7, "top_k": 30, "repetition_penalty": 1.0},
+        "angry": {"temperature": 0.95, "top_p": 0.92, "top_k": 60, "repetition_penalty": 1.2},
+        "fearful": {"temperature": 0.85, "top_p": 0.85, "top_k": 50, "repetition_penalty": 1.1},
+        "surprised": {"temperature": 0.95, "top_p": 0.95, "top_k": 80, "repetition_penalty": 1.1},
+        "disgusted": {"temperature": 0.7, "top_p": 0.8, "top_k": 40, "repetition_penalty": 1.15},
+        "whispering": {"temperature": 0.4, "top_p": 0.6, "top_k": 20, "repetition_penalty": 1.0},
+        "excited": {"temperature": 1.0, "top_p": 0.98, "top_k": 100, "repetition_penalty": 1.15},
+        "calm": {"temperature": 0.5, "top_p": 0.7, "top_k": 30, "repetition_penalty": 1.0},
+    }
+
+    # ── Natural emotion cue prefixes ──
+    EMOTION_TEXT_CUES = {
+        "happy": "*smiling* ",
+        "sad": "*sighs softly* ",
+        "angry": "*speaking forcefully* ",
+        "fearful": "*nervously* ",
+        "surprised": "*gasps* ",
+        "disgusted": "*scoffs* ",
+        "whispering": "(whispers) ",
+        "excited": "*excitedly* ",
+        "calm": "",
+    }
+
+    # ── Emotion instruction prompts for generate_voice_design instruct param ──
+    EMOTION_INSTRUCT = {
+        "neutral": "",
+        "happy": "Speak with a cheerful, upbeat, and joyful tone. Sound genuinely happy and warm.",
+        "sad": "Speak with a melancholic, sorrowful, and subdued tone. Sound genuinely sad and heavy-hearted.",
+        "angry": "Speak with an intense, forceful, and aggressive tone. Sound genuinely angry and frustrated.",
+        "fearful": "Speak with a trembling, anxious, and nervous tone. Sound genuinely afraid and worried.",
+        "surprised": "Speak with surprise, wonder, and astonishment. Sound genuinely shocked and amazed.",
+        "disgusted": "Speak with disgust and revulsion in your voice. Sound genuinely repulsed.",
+        "whispering": "Speak in a very soft, quiet whisper. Almost inaudible, hushed and secretive.",
+        "excited": "Speak with high energy, enthusiasm, and excitement. Sound genuinely thrilled and animated.",
+        "calm": "Speak in a calm, relaxed, and serene manner. Sound peaceful and composed.",
+    }
+
     def generate_speech(self, text: str, embedding_path: str, **kwargs) -> bytes:
         """
         Generate speech using a saved voice prompt.
-        For the VoiceDesign model, this loads a cached prompt from a previous design.
+        For the VoiceDesign model, leverages the `instruct` parameter for
+        proper emotion control when falling back to voice design mode.
         """
         self.load()
         if self._load_failed or not self._model:
@@ -197,7 +239,31 @@ class QwenDesignEngine(BaseEngine):
         if language.lower() not in supported:
             language = "English"
 
+        emotion = kwargs.get("emotion", "neutral")
+        speed = kwargs.get("speed", 1.0)
+        pitch = kwargs.get("pitch", 1.0)
+        style = kwargs.get("style", None)
         text = normalize_text(text)
+
+        # ── Strategy 0: Parse emotion from natural language style prompt ──
+        # If the user provided a descriptive prompt (e.g. "deep, dramatic voice with intense energy"),
+        # we map it to an emotion profile to apply the correct sampling parameters.
+        if style:
+            style_lower = style.lower()
+            if any(w in style_lower for w in ["angry", "shout", "forceful", "intense", "dramatic", "furious", "aggressive"]):
+                emotion = "angry"
+            elif any(w in style_lower for w in ["happy", "cheerful", "excited", "joy", "celebratory", "laugh", "upbeat"]):
+                emotion = "happy"
+            elif any(w in style_lower for w in ["sad", "crying", "depressed", "sorrow", "tear", "melancholy"]):
+                emotion = "sad"
+            elif any(w in style_lower for w in ["whisper", "quiet", "soft", "secret", "creepy", "bedtime", "gentle", "calm"]):
+                emotion = "whisper"
+            elif any(w in style_lower for w in ["serious", "news", "authoritative", "professional", "documentary", "firm"]):
+                emotion = "serious"
+            elif any(w in style_lower for w in ["scared", "fear", "terrified", "panic", "horror", "anxious"]):
+                emotion = "scared"
+                
+            logger.info(f"Inferred emotion '{emotion}' from style prompt: '{style[:50]}'")
 
         seed = kwargs.get("seed", None)
         if seed is not None:
@@ -205,6 +271,11 @@ class QwenDesignEngine(BaseEngine):
             if torch.cuda.is_available():
                 torch.cuda.manual_seed(seed)
             np.random.seed(seed)
+
+        # Get emotion-aware sampling parameters
+        sampling = self.EMOTION_SAMPLING.get(emotion, self.EMOTION_SAMPLING["neutral"]).copy()
+        logger.info(f"Emotion '{emotion}' → sampling: temp={sampling['temperature']}, "
+                     f"top_p={sampling['top_p']}, rep_penalty={sampling['repetition_penalty']}")
 
         # Try to load voice prompt from embedding file.
         # If it's pure UTF-8 text, it's a designed voice description.
@@ -221,19 +292,47 @@ class QwenDesignEngine(BaseEngine):
 
         is_real_prompt = isinstance(prompt_items, (list, tuple, dict))
         if is_real_prompt:
+            # ── Strategy 2: Natural emotion cues in text ──
+            # The tokenizer preserves paralinguistic markers like (laughs), *sighs*.
+            # Embed these as natural cues rather than raw style prompts (which get read aloud).
+            if emotion and emotion != "neutral":
+                cue = self.EMOTION_TEXT_CUES.get(emotion, "")
+                if cue:
+                    text = f"{cue} {text}".strip()
+                    logger.info(f"Applied prefix cue for '{emotion}': {cue}")
+
+            logger.info(f"Generating with cloned prompt ({emotion}): {text[:80]}...")
             wavs, sr = self._model.generate_voice_clone(
                 text=text,
                 language=language,
                 voice_clone_prompt=prompt_items,
+                do_sample=True,
+                temperature=sampling["temperature"],
+                top_p=sampling["top_p"],
+                top_k=sampling["top_k"],
+                repetition_penalty=sampling["repetition_penalty"],
             )
         else:
-            # Fallback: generating using voice description (prompt_items is the description text)
+            # Using voice description — leverage `instruct` parameter for emotion!
             instruct_text = prompt_items if isinstance(prompt_items, str) and prompt_items else "A clear, natural speaking voice with moderate pace."
-            logger.info(f"Generating using voice description: {instruct_text[:50]}...")
+
+            # Build emotion-enriched instruct by combining voice description + emotion
+            emotion_instruct = self.EMOTION_INSTRUCT.get(emotion, "")
+            if style:
+                emotion_instruct = f"{emotion_instruct} {style}".strip()
+            if emotion_instruct:
+                instruct_text = f"{instruct_text}. {emotion_instruct}"
+
+            logger.info(f"Generating with voice design instruct ({emotion}): {instruct_text[:80]}...")
             wavs, sr = self._model.generate_voice_design(
                 text=text,
                 instruct=instruct_text,
                 language=language,
+                do_sample=True,
+                temperature=sampling["temperature"],
+                top_p=sampling["top_p"],
+                top_k=sampling["top_k"],
+                repetition_penalty=sampling["repetition_penalty"],
             )
 
         audio_array = wavs[0]
@@ -244,6 +343,31 @@ class QwenDesignEngine(BaseEngine):
 
         if audio_array.ndim > 1:
             audio_array = audio_array.squeeze()
+
+        # Speed control
+        if speed and speed != 1.0 and 0.5 <= speed <= 2.0:
+            try:
+                import librosa
+                audio_array = librosa.effects.time_stretch(audio_array, rate=speed)
+                logger.info(f"Applied speed={speed}x via librosa time_stretch")
+            except ImportError:
+                original_len = len(audio_array)
+                target_len = int(original_len / speed)
+                indices = np.linspace(0, original_len - 1, target_len)
+                audio_array = np.interp(indices, np.arange(original_len), audio_array).astype(np.float32)
+
+        # Pitch control
+        if pitch and pitch != 1.0 and 0.5 <= pitch <= 2.0:
+            try:
+                import librosa
+                import math
+                n_steps = 12 * math.log2(pitch)
+                audio_array = librosa.effects.pitch_shift(
+                    audio_array, sr=sr, n_steps=n_steps
+                )
+                logger.info(f"Applied pitch={pitch}x ({n_steps:+.1f} semitones) via librosa pitch_shift")
+            except ImportError:
+                logger.warning("librosa not installed — pitch shift skipped")
 
         buffer = io.BytesIO()
         sf.write(buffer, audio_array, sr, format="WAV")

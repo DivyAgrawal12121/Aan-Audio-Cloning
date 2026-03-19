@@ -540,10 +540,8 @@ async def generate_speech(req: GenerateRequest, db: Session = Depends(get_db)):
 
     # Optional parameters for advanced models
     kwargs = {}
-    if hasattr(req, "temperature") and req.temperature is not None:
-        kwargs["temperature"] = req.temperature
-    if hasattr(req, "repetition_penalty") and req.repetition_penalty is not None:
-        kwargs["repetition_penalty"] = req.repetition_penalty
+    # Note: temperature/repetition_penalty are now managed by the engine
+    # based on the selected emotion. Do NOT override them here.
     # Phase 2: Seed control for reproducibility
     if req.seed is not None:
         kwargs["seed"] = req.seed
@@ -905,6 +903,7 @@ async def generate_speech_stream(req: StreamGenerateRequest, db: Session = Depen
                     speed=req.speed,
                     pitch=req.pitch,
                     style=req.style,
+                    seed=req.seed,
                 )
                 chunk_audio = master_audio(chunk_audio)
 
@@ -951,6 +950,7 @@ def _run_async_job(job_id: str, req_data: dict):
                 speed=req_data.get("speed", 1.0),
                 pitch=req_data.get("pitch", 1.0),
                 style=req_data.get("style"),
+                seed=req_data.get("seed"),
             )
         else:
             audio_segments = []
@@ -966,6 +966,7 @@ def _run_async_job(job_id: str, req_data: dict):
                     speed=req_data.get("speed", 1.0),
                     pitch=req_data.get("pitch", 1.0),
                     style=req_data.get("style"),
+                    seed=req_data.get("seed"),
                 )
                 chunk_data, chunk_sr = sf.read(io.BytesIO(chunk_audio))
                 audio_segments.append(chunk_data)

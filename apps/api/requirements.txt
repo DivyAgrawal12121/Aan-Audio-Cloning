@@ -43,3 +43,6 @@ openai-whisper==20231117
 # Monitoring & Progress
 nvidia-ml-py==12.535.0
 tqdm==4.66.2
+
+# Optional Performance Boosters
+# flash-attn>=2.5.8  # Install manually: pip install flash-attn --no-build-isolation

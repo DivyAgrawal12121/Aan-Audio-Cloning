@@ -74,11 +74,12 @@ export type Emotion =
     | "disgusted"
     | "whispering"
     | "excited"
-    | "calm";
+    | "calm"
+    | "serious"
+    | "whisper";
 
 export type SupportedLanguage =
     | "English"
-    | "Hindi"
     | "Chinese"
     | "Japanese"
     | "Korean"

@@ -6,7 +6,6 @@ import type { SupportedLanguage, Emotion } from "./types";
 
 export const SUPPORTED_LANGUAGES: SupportedLanguage[] = [
     "English",
-    "Hindi",
     "Chinese",
     "Japanese",
     "Korean",
